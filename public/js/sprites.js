@@ -1,7 +1,7 @@
 // how everything looks. Each draw function takes the entity (and night level n / time now where needed) and paints with px().
 import { clamp, hash, lerp } from './util.js';
 import { T, W, H, SKY, SEASON, PAL, weather, hourNow, HEIGHTS, isOpen, pond, fountain, benches, flowers, LANE, BUS_STOP, BUS_WAIT, mode } from './world.js';
-import { ctx, px, shade, rgbn, grey, label, bubble } from './canvas.js';
+import { ctx, px, shade, rgbn, grey, label, bubble, blit } from './canvas.js';
 import { geese } from './animals.js';
 
 // ---------- buildings ----------
@@ -51,78 +51,86 @@ export function drawBuilding(b, n, now) {
 }
 
 // ---------- people ----------
-const SKIN = '#f1c9a5', LEG = '#223';
+// h hair, s skin, t shirt, l leg, r bike frame / rod, w wheel. Column 0 is x-1 for the plain frames; the bike frame is two wider on each side.
+const PERSON = {
+  stand: ['hhh', 'sss', 'sss', 'ttt', 'ttt', 'ttt', '.l.'],
+  step:  ['hhh', 'sss', 'sss', 'ttt', 'ttt', 'ttt', 'l.l'],
+  sit:   ['hhh', 'sss', 'sss', 'sss', 'ttt', 'ttt', 'lll'],
+  fish:  ['......r.', 'hhh..r..', 'sss.r...', 'sssr....', 'ttt.....', 'ttt.....', 'ttt.....', '.ll.....'],
+  bike:  ['..hhh..', '..sss..', '..sss..', '..ttt..', '..ttt..', '.rrrrr.', 'ww...ww'],
+};
+const SKIN = '#f1c9a5';
 export function drawPerson(p, now) {
   if (p.inside) return;
   const x = Math.round(p.x) - 1, y = Math.round(p.y) - 5, moving = p.route.length > 0, step = moving && Math.floor(p.frame * 7) % 2;
   const dance = mode.current === 'gathering' && !moving ? Math.round(Math.sin(now / 120 + p.x)) : 0;
   const yy = y - Math.abs(dance);
-  const torso = (h = 3) => { px(x, yy + 2, p.shirt, 3, h); px(x, yy, SKIN, 3, 2); px(x, yy - 1, p.hair, 3, 1); };
-  if (p.bike) { px(x - 2, yy + 5, '#222', 2, 1); px(x + 3, yy + 5, '#222', 2, 1); px(x - 1, yy + 4, '#c33', 5, 1); torso(2); }
+  const pal = { h: p.hair, s: SKIN, t: p.shirt, l: '#223', r: '#c33', w: '#222' };
+  if (p.bike) blit(PERSON.bike, x - 2, yy - 1, pal);
   else if (p.act === 'fish') {
-    px(x + 1, yy + 5, LEG, 1, 1); px(x + 2, yy + 5, LEG, 1, 1); torso();
-    for (let i = 0; i < 4; i++) px(x + 3 + i, yy + 1 - i, '#8a6a3a');
-    const bob = Math.round(Math.sin(now / 500)); px(x + 7, yy - 1, 'rgba(200,220,255,0.6)', 1, 10 + bob); px(x + 7, yy + 9 + bob, '#e33', 1, 1);
+    blit(PERSON.fish, x, yy - 2, { ...pal, r: '#8a6a3a' });
+    const bob = Math.round(Math.sin(now / 500)); px(x + 7, yy - 1, 'rgba(200,220,255,0.6)', 1, 10 + bob); px(x + 7, yy + 9 + bob, '#e33', 1, 1);   // line and float
   }
-  else if (p.act === 'sit') { px(x, yy + 4, p.shirt, 3, 2); px(x, yy + 1, SKIN, 3, 3); px(x, yy, p.hair, 3, 1); px(x, yy + 6, LEG, 3, 1); }
-  else { px(x + (step ? 0 : 1), yy + 5, LEG, 1, 1); px(x + (step ? 2 : 1), yy + 5, LEG, 1, 1); torso(); }
+  else if (p.act === 'sit') blit(PERSON.sit, x, yy, pal);
+  else blit(step ? PERSON.step : PERSON.stand, x, yy - 1, pal);
   if (p.hat || (SEASON === 'winter' && hash(p.name) % 2)) px(x - 1, yy - 2, SEASON === 'winter' ? p.shirt : '#333', 5, 1);
   bubble(p.say, x + 1.5, yy - 4, 5);
 }
 
 // ---------- dogs ----------
+// Drawn facing right; mirrored when d.flip. Column 0 is the tail (x-1), body starts at column 1.
+// c coat, e eye, m muzzle tip, w chest, v chest-or-spot, d spot, k collar, p pointy ear, f floppy ear, t tail, l leg
+const DOG = {
+  1: { stand: ['.....p.', '....fe.', 'tcdckcm', '.ccvww.', '..ll...'], step: ['.....p.', '....fe.', 'tcdckcm', '.ccvww.', '.l..l..'],
+       wag:   ['.....p.', 't...fe.', '.cdckcm', '.ccvww.', '..ll...'], lie:  ['.....p.', '.cdcce.', 'tccvkcm'],                swim: ['.....p.', '.....e.', '..cckcm'] },
+  2: { stand: ['......p.', '.....fe.', 'tcdcckcm', '.cccvww.', '..l.l...'], step: ['......p.', '.....fe.', 'tcdcckcm', '.cccvww.', '.l...l..'],
+       wag:   ['......p.', 't....fe.', '.cdcckcm', '.cccvww.', '..l.l...'], lie:  ['......p.', '.cdccce.', 'tcccvkcm'],         swim: ['......p.', '......e.', '..ccckcm'] },
+  3: { stand: ['.......p.', '......fe.', 'tcdcccccm', '.ccccdkcm', '.ccccwww.', '..l..l...'], step: ['.......p.', '......fe.', 'tcdcccccm', '.ccccdkcm', '.ccccwww.', '.l....l..'],
+       wag:   ['.......p.', 't.....fe.', '.cdcccccm', '.ccccdkcm', '.ccccwww.', '..l..l...'], lie:  ['.......p.', '.cdcccce.', 'tccccvkcm'], swim: ['.......p.', '.......e.', '..cccckcm'] },
+};
+function dogPalette(d) {
+  const tux = d.marking === 'tuxedo', spots = d.marking === 'spots', white = '#f2f2f2', dark = 'rgba(0,0,0,0.25)';
+  return { c: d.coat, t: d.coat, e: '#111', m: tux ? white : d.coat, w: tux ? white : d.coat, v: tux ? white : spots ? dark : d.coat, d: spots ? dark : d.coat,
+    k: d.collar || d.coat, p: d.ears === 'pointy' ? d.coat : null, f: d.ears === 'floppy' ? d.coat : null, l: tux ? white : '#222' };
+}
 export function drawDog(d) {
-  const bw = 3 + d.size, bh = d.size === 3 ? 3 : 2, x = Math.round(d.x) - Math.floor(bw / 2), y = Math.round(d.y) - bh, moving = d.route.length > 0, step = moving ? Math.floor(d.frame * 10) % 2 : 0;
-  const fx = d.flip ? x - 1 : x + bw, dir = d.flip ? -1 : 1;                 // head column just in front of the body
-  const dark = 'rgba(0,0,0,0.25)', white = '#f2f2f2', tux = d.marking === 'tuxedo', spots = d.marking === 'spots';
-  const ears = (hy) => d.ears === 'pointy' ? px(fx, hy - 1, d.coat, 1, 1) : px(fx - dir, hy, d.coat, 1, 1);
-  if (d.swim) {                                                                  // only the head and a sliver of back show above the water
-    const wy = Math.round(d.y); px(x + 1, wy - 1, d.coat, bw - 2, 1); px(fx, wy - 2, d.coat, 1, 2); px(fx + dir, wy - 1, tux ? white : d.coat, 1, 1); px(fx, wy - 2, '#111', 1, 1);
-    ears(wy - 2); if (d.collar) px(fx - dir, wy - 1, d.collar, 1, 1);
+  const bw = 3 + d.size, bh = d.size === 3 ? 3 : 2, x = Math.round(d.x) - Math.floor(bw / 2), y = Math.round(d.y) - bh, moving = d.route.length > 0;
+  const left = d.flip ? x - 2 : x - 1, pal = dogPalette(d), frames = DOG[d.size];
+  if (d.swim) {                                                                  // head and a sliver of back above the water, with a ripple
+    const wy = Math.round(d.y); blit(frames.swim, left, wy - 3, pal, d.flip);
     px(x - 1, wy, 'rgba(255,255,255,0.35)', bw + 3, 1); return bubble(d.say, x + bw / 2, wy - 5);
   }
-  if (d.lying) {                                                                 // flat: body one row shorter, head resting forward, no legs
-    const ly = y + bh - 2; px(x, ly, d.coat, bw, 2); px(fx, ly, d.coat, 1, 2); px(fx + dir, ly + 1, d.coat, 1, 1);
-    if (tux) { px(fx + dir, ly + 1, white, 1, 1); px(x + (d.flip ? 0 : bw - 2), ly + 1, white, 2, 1); }
-    if (spots) { px(x + 1, ly, dark, 1, 1); px(x + bw - 2, ly + 1, dark, 1, 1); }
-    ears(ly); px(fx, ly, '#111', 1, 1); if (d.collar) px(fx - dir, ly + 1, d.collar, 1, 1); px(d.flip ? x + bw : x - 1, ly + 1, d.coat, 1, 1);
-    return bubble(d.say, x + bw / 2, ly - 3);
-  }
-  px(x, y, d.coat, bw, bh);                                                      // body
-  px(fx, y - 1, d.coat, 1, bh + 1);                                              // head (neck up to body top)
-  px(fx + dir, y, d.coat, 1, 1 + (d.size === 3 ? 1 : 0));                        // muzzle
-  if (tux) { px(fx + dir, y + (d.size === 3 ? 1 : 0), white, 1, 1); px(x + (d.flip ? 0 : bw - 2), y + bh - 1, white, 2, 1); px(fx, y + bh - 1, white, 1, 1); }
-  if (spots) { px(x + 1, y, dark, 1, 1); px(x + bw - 2, y + 1, dark, 1, 1); }
-  ears(y - 1); px(fx, y - 1, '#111', 1, 1);
-  if (d.collar) px(fx - dir, y + (d.size === 3 ? 1 : 0), d.collar, 1, 1);
-  const wag = d.follow && !moving ? Math.floor(d.frame * 6) % 2 : 0;             // tail wags when hanging out with someone
-  px(d.flip ? x + bw : x - 1, y - wag, d.coat, 1, 1);
-  px(x + (step ? 0 : 1), y + bh, tux ? white : '#222', 1, 1); px(x + bw - (step ? 1 : 2), y + bh, tux ? white : '#222', 1, 1);   // legs
+  if (d.lying) { const ly = y + bh - 2; blit(frames.lie, left, ly - 1, pal, d.flip); return bubble(d.say, x + bw / 2, ly - 3); }
+  const step = moving && Math.floor(d.frame * 10) % 2, wag = d.follow && !moving && Math.floor(d.frame * 6) % 2;
+  blit(step ? frames.step : wag ? frames.wag : frames.stand, left, y - 2, pal, d.flip);
   bubble(d.say, x + bw / 2, y - 4);
 }
 
-// ---------- small animals ----------
+// ---------- small animals (drawn facing right, mirrored when flipped; ox = which column sits on the entity's x) ----------
+const SQUIRREL = { ox: 2, run: [['T...', 'Tbbh'], ['T..h', 'Tbb.']] };                        // T tail, b body, h head
+const DUCK = { ox: 1, swim: ['..Hb', '..H.', 'gBB.'], flyUp: ['w.w.', 'BBBH'], flyDown: ['BBBH', 'w.w.'] };   // B body, g wing/speculum, H head, b bill, w wing
+const GOOSE = { ox: 3, ground: ['.....nn', '.....n.', 'B....w.', '.BBBBB.', '.BBBBB.', '..f.f..'], flyUp: ['w.w..', 'BBBnn', '.....'], flyDown: ['.....', 'BBBnn', 'w.w..'] };
+const BIRD = { ox: 1, up: ['w.w', '.b.'], down: ['...', 'wbw'] };
+const leftOf = (rows, ox, x, flip) => flip ? x - (rows[0].length - 1 - ox) : x - ox;
+
 export function drawSquirrel(q) {
   if (q.hidden) return; const x = Math.round(q.x), y = Math.round(q.y), step = q.route.length ? Math.floor(q.frame * 12) % 2 : 0;
-  px(x - 1, y, '#9a4a20', 2, 1); px(q.flip ? x + 1 : x - 2, y - 1, '#b05a28', 1, 2); px(q.flip ? x - 2 : x + 1, y - step, '#9a4a20', 1, 1);
+  blit(SQUIRREL.run[step], leftOf(SQUIRREL.run[step], SQUIRREL.ox, x, q.flip), y - 1, { T: '#b05a28', b: '#9a4a20', h: '#9a4a20' }, q.flip);
 }
-export function drawDuck(d, now) {                                              // mallards: drakes with a green head, hens mottled brown
-  const x = Math.round(d.x), y = Math.round(d.y), f = d.flip ? -1 : 1, body = d.male ? '#8a7a66' : '#8c6a44', head = d.male ? '#1f7a3a' : '#7a5a3a';
-  if (d.air) { const flap = Math.floor(now / 170 + x / 10) % 2, wing = d.male ? '#5a6a90' : body; px(x - 1, y, body, 3, 1); px(x + f * 2, y, head, 1, 1); px(x - 1, y + (flap ? -1 : 1), wing, 1, 1); px(x + 1, y + (flap ? -1 : 1), wing, 1, 1); }
-  else { px(x - 1, y, body, 3, 1); if (d.male) { px(x - f, y, '#5a6a90', 1, 1); px(x + f, y - 1, '#eee', 1, 1); } px(x + f, y - 1, head, 1, 1); px(x + f, y - 2, head, 1, 1); px(x + f * 2, y - 2, '#e8b020', 1, 1); }
+export function drawDuck(d, now) {                                              // mallards: drakes with a green head and blue speculum, hens mottled brown
+  const x = Math.round(d.x), y = Math.round(d.y), body = d.male ? '#8a7a66' : '#8c6a44';
+  const pal = { B: body, g: d.male ? '#5a6a90' : body, w: d.male ? '#5a6a90' : body, H: d.male ? '#1f7a3a' : '#7a5a3a', b: '#e8b020' };
+  if (d.air) { const rows = Math.floor(now / 170 + x / 10) % 2 ? DUCK.flyDown : DUCK.flyUp; blit(rows, leftOf(rows, DUCK.ox, x, d.flip), y - 1, pal, d.flip); }
+  else blit(DUCK.swim, leftOf(DUCK.swim, DUCK.ox, x, d.flip), y - 2, pal, d.flip);
   bubble(d.say, x + 1, y - 4);
 }
 export function drawGoose(g, now) {
-  const x = Math.round(g.x), y = Math.round(g.y), f = g.flip ? -1 : 1, body = '#6e6358', neck = '#1a1a1a';
-  if (geese.state === 'landed' || geese.state === 'landing') {
-    px(x - 2, y - 1, body, 5, 2); px(x + f * 2, y - 4, neck, 1, 3); px(x + f * 3, y - 4, neck, 1, 1); px(x + f * 2, y - 2, '#eee', 1, 1); px(x - f * 3, y - 2, body, 1, 1);
-    px(x - 1, y + 1, '#333', 1, 1); px(x + 1, y + 1, '#333', 1, 1);
-  } else {
-    const flap = ((now / 500 + x / 20) % 1) < 0.5 ? 0 : 1; px(x - 1, y, body, 3, 1); px(x + f * 2, y, neck, 2, 1); px(x - 1, y + (flap ? -1 : 1), body, 1, 1); px(x + 1, y + (flap ? -1 : 1), body, 1, 1);
-  }
+  const x = Math.round(g.x), y = Math.round(g.y), pal = { B: '#6e6358', w: '#eee', n: '#1a1a1a', f: '#333' };
+  if (geese.state === 'landed' || geese.state === 'landing') blit(GOOSE.ground, leftOf(GOOSE.ground, GOOSE.ox, x, g.flip), y - 4, pal, g.flip);
+  else { const rows = ((now / 500 + x / 20) % 1) < 0.5 ? GOOSE.flyUp : GOOSE.flyDown; blit(rows, leftOf(rows, 1, x, g.flip), y - 1, { ...pal, w: pal.B }, g.flip); }
   bubble(g.say, x, y - 6);
 }
-export function drawBird(b, now) { px(b.x, b.y, '#333', 1, 1); const fl = Math.floor(now / 260 + b.x / 15) % 2; px(b.x + (fl ? 1 : -1), b.y - 1, '#333', 1, 1); px(b.x + (fl ? -1 : 1), b.y - 1, '#333', 1, 1); }
+export function drawBird(b, now) { const rows = Math.floor(now / 260 + b.x / 15) % 2 ? BIRD.down : BIRD.up; blit(rows, Math.round(b.x) - 1, Math.round(b.y) - 1, { w: '#333', b: '#333' }); }
 
 // ---------- street furniture ----------
 export function drawTree(c, r, n) {

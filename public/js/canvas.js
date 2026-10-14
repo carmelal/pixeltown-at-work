@@ -19,3 +19,12 @@ export function label(text, x, y, color, size = 6, align = 'center', outline = t
   hctx.fillStyle = color; hctx.fillText(text, x * S, y * S);
 }
 export const bubble = (text, x, y, size = 4.5) => text && label(text, x, y, '#fff', size, 'center', false);
+
+// string-art sprites: rows of characters, '.' is transparent, every other char is looked up in the palette (null/undefined = skip)
+// left is the world x of column 0; mirror=true flips columns around the sprite's own width
+export function blit(rows, left, top, pal, mirror = false) {
+  for (let r = 0; r < rows.length; r++) {
+    const row = rows[r], w = row.length;
+    for (let c = 0; c < w; c++) { const ch = row[c]; if (ch === '.') continue; const col = pal[ch]; if (col) px(left + (mirror ? w - 1 - c : c), top + r, col); }
+  }
+}
