@@ -1,7 +1,7 @@
 // wiring: the frame loop, draw order, hover tooltips, dev bar
 import { T, W, H, SKY, SEASON, southern, night, weather, WICON, nowDate, clock, seasonOverridden, buildings, trees, docks, lamps, pond, LANE, BUS_STOP, mode, cursor } from './world.js';
 import { cv, ctx, hi, hctx, fitOverlay, label } from './canvas.js';
-import { people, tickPerson } from './people.js';
+import { people, tickPerson, picnics, tickPicnics } from './people.js';
 import { dogs, tickDog, ducks, tickDucks, squirrels, tickSquirrel, geese, tickGeese, geeseOnGround } from './animals.js';
 import { bus, tickBus, tickAmbient, particles, birds, van, carrier, tickMail } from './town.js';
 import { onEvent, connect } from './events.js';
@@ -18,7 +18,7 @@ let last = performance.now();
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
   if ((mode.current === 'gathering' || mode.current === 'nap') && now > mode.until) onEvent({ type: 'wake' });
-  for (const p of people) tickPerson(p, dt);
+  for (const p of people) tickPerson(p, dt); tickPicnics();
   for (const d of dogs) tickDog(d, dt);
   for (const q of squirrels) tickSquirrel(q, dt);
   tickGeese(dt); tickDucks(dt); tickBus(dt); tickMail(dt); tickAmbient(dt);
@@ -39,13 +39,14 @@ function render(now) {
     ...people.map(p => ({ y: p.y, f: () => draw.drawPerson(p, now) })),
     ...dogs.map(d => ({ y: d.y, f: () => draw.drawDog(d) })),
     ...squirrels.map(q => ({ y: q.y, f: () => draw.drawSquirrel(q) })),
-    ...(geese.state === 'away' ? [] : geese.birds.map(g => ({ y: geese.state === 'landed' || (geese.state === 'landing' && Math.abs(g.gy - g.y) < 3) ? g.y + 1 : FRONT, f: () => draw.drawGoose(g, now) }))),
+    ...(geese.state === 'away' ? [] : geese.birds.map(g => ({ y: (geese.state === 'landed' && !(geese.menace && g.hop && Math.hypot(g.gx - g.x, g.gy - g.y) > 4)) || (geese.state === 'landing' && Math.abs(g.gy - g.y) < 3) ? g.y + 1 : FRONT, f: () => draw.drawGoose(g, now) }))),
     ...ducks.filter(d => !(d.air && d.air.phase === 'gone')).map(d => ({ y: d.air ? FRONT : d.y, f: () => draw.drawDuck(d, now) })),
     { y: bus.state === 'rising' ? H + 1 : bus.y + 1, f: () => draw.drawBus(bus, n) },
     { y: van.state === 'rising' ? H + 2 : van.y + 1, f: () => draw.drawVan(van, n) },
     ...(carrier.active ? [{ y: carrier.y, f: () => draw.drawPerson(carrier, now) }] : []),
     ...trees.map(([c, r]) => ({ y: r * T + 6, f: () => draw.drawTree(c, r, n) })),
     ...docks.map(d => ({ y: d.r * T + 2, f: () => draw.drawDock(d) })),
+    ...picnics.map(b => ({ y: b.y - 3, f: () => draw.drawBlanket(b) })),
     ...lamps.map(([c, r]) => ({ y: r * T + 1, f: () => draw.drawLamp(c, r, n) })),
   ];
   layer.sort((a, b) => a.y - b.y).forEach(d => d.f());
@@ -62,7 +63,7 @@ function hitTargets() {
   for (const p of people) if (!p.inside) t.push({ x: p.x, y: p.y + 2, r: 5, text: `${p.name}${p.visitor ? ' (visiting)' : ''} — ${p.desc}` });
   for (const d of dogs) t.push({ x: d.x, y: d.y, r: 5, text: `${d.name} (${d.temperament}) — ${d.desc}` });
   if (carrier.active) t.push({ x: carrier.x, y: carrier.y + 2, r: 5, text: `mail carrier — ${carrier.desc}` });
-  if (geese.state !== 'away') for (const g of geese.birds) t.push({ x: g.x, y: g.y, r: 5, text: `canada goose — ${geese.state === 'landed' ? 'occupying the park' : geese.state === 'leaving' ? 'leaving in a huff' : 'flying over'}` });
+  if (geese.state !== 'away') for (const g of geese.birds) t.push({ x: g.x, y: g.y, r: 5, text: `canada goose — ${geese.menace ? `${geese.check} failed; on the warpath` : geese.state === 'landed' ? `waiting on ${geese.check || 'the checks'}` : geese.state === 'leaving' ? 'leaving in a huff' : 'flying in'}` });
   for (const q of squirrels) if (!q.hidden) t.push({ x: q.x, y: q.y, r: 4, text: 'squirrel — making a run for it' });
   for (const d of ducks) if (!(d.air && d.air.phase === 'gone')) t.push({ x: d.x, y: d.y, r: 4, text: `duck — ${d.air ? 'flying' : d.scared > 0 ? 'fleeing a dog' : d.lure ? 'coming for bread' : 'paddling'}` });
   for (const d of docks) t.push({ x: d.c * T + 4, y: d.r * T + 4, r: 5, text: `bikeshare — ${d.bikes} bike${d.bikes === 1 ? '' : 's'} docked` });

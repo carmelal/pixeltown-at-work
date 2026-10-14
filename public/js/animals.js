@@ -1,7 +1,7 @@
 // dogs, ducks, squirrels and geese
 import { rnd, ri, pick, clamp, moveToward } from './util.js';
-import { T, W, H, tileX, tileY, SEASON, hourNow, night, wet, pond, trees, walkTiles, pondSide, spotsAround, nearestTile, path, routeTo, followRoute, cursor } from './world.js';
-import { people, groups, send, idle } from './people.js';
+import { T, W, H, tileX, tileY, SEASON, hourNow, night, wet, pond, trees, walkTiles, pondSide, spotsAround, nearestTile, path, routeTo, followRoute, cursor, doorOf, bType } from './world.js';
+import { people, groups, send, idle, picnics } from './people.js';
 import { particles, splash, carrier } from './town.js';
 
 // ---------- dogs ----------
@@ -36,8 +36,11 @@ export function tickDog(d, dt) {
     if (moveToward(d, sw.tx, sw.ty, 12, dt)) { sw.tx = clamp(d.x + rnd(-12, 12), 4, pond.w * T - 8); sw.ty = pondY(); if (Math.random() < 0.3) d.say = pick(['💦', '😆', '🦆']); scareDucksNear(d, 12); }
     d.desc = 'swimming after the ducks'; return;
   }
+  if (d.name === 'tuck' && picnics.length && !d.picnic && !geese.menace && !(d.lying && d.desc === 'begging at the picnic')) {   // tuck abandons whatever he is doing for a picnic
+    const b = picnics[0]; if (path([d.c, d.r], b.tile)) { d.chase = null; d.play = null; d.follow = null; d.swim = null; d.lying = false; d.picnic = b; d.route = path([d.c, d.r], b.tile); d.desc = 'sprinting to the picnic'; d.say = '🥺'; d.wait = 0; }
+  }
   if (d.route.length) {
-    followRoute(d, d.chase ? 44 : d.play ? 36 : 20 + d.size * 2, dt, () => { d.wait = d.chase ? 0 : d.play ? rnd(0.2, 0.6) : rnd(1, 4); });
+    followRoute(d, d.chase ? 44 : d.picnic ? 40 : d.play ? 36 : 20 + d.size * 2, dt, () => { d.wait = d.chase ? 0 : d.play ? rnd(0.2, 0.6) : rnd(1, 4); });
     // mid-chase: squirrel flees when the dog gets close
     if (d.chase && d.chase.kind === 'squirrel' && !d.chase.hidden && Math.hypot(d.chase.x - d.x, d.chase.y - d.y) < 10) { hideSquirrel(d.chase); d.say = '🐿️'; d.chase = null; d.route = []; d.wait = 2.5; d.desc = 'lost the squirrel'; }
     return;
@@ -66,6 +69,10 @@ export function tickDog(d, dt) {
   // lazy dogs flop down wherever they are (more so in summer and mid-afternoon)
   const lazyNow = d.laziness * (SEASON === 'summer' ? 1.4 : 1) * (hourNow() > 13 && hourNow() < 16 ? 1.5 : 1);
   if (Math.random() < lazyNow) { d.lying = true; d.follow = null; d.desc = pick(['lying in the sun', 'having a lie down', 'not moving for anyone']); d.wait = rnd(8, 25); if (Math.random() < 0.5) d.say = '💤'; return; }
+  if (geese.menace) { d.chase = null; d.follow = null; d.play = null; const t = pick(trees), sp = spotsAround(t[0], t[1]); if (sp.length && Math.hypot(t[0] - d.c, t[1] - d.r) > 1.5) { d.route = path([d.c, d.r], pick(sp)) || []; d.desc = 'getting away from the geese'; } else { d.lying = true; d.desc = 'cowering under a tree'; d.wait = rnd(3, 6); } d.say = '😨'; return; }
+  // a picnic is irresistible: go sit on the blanket and beg
+  if (d.picnic) { const b = d.picnic; d.picnic = null; if (picnics.includes(b)) { d.lying = true; d.follow = null; d.desc = 'begging at the picnic'; d.say = pick(['🥺', '🦴', '👀']); d.wait = rnd(8, 15); return; } }
+  if (picnics.length && Math.random() < (d.temperament === 'lazy' ? 0.15 : 0.35)) { const b = pick(picnics); if (path([d.c, d.r], b.tile)) { d.picnic = b; d.follow = null; d.route = path([d.c, d.r], b.tile); d.desc = 'heading for the picnic'; d.say = '👃'; return; } }
   // social dogs drift toward a chat group
   if (d.temperament === 'social' && groups.length && Math.random() < 0.4) { const g = pick(groups), m = pick(g.members), sp = spotsAround(m.c, m.r); if (sp.length) { d.follow = null; d.route = path([d.c, d.r], pick(sp)) || []; d.desc = `joining ${m.name}'s conversation`; return; } }
   // distraction: geese, squirrels or ducks
@@ -138,7 +145,7 @@ export function tickDucks(dt) {
 }
 
 // ---------- canada geese: a V flies over now and then; sometimes the flock lands in the park, hisses at anyone close, leaves when a dog shows up ----------
-export const geese = { state: 'away', timer: rnd(20, 60), birds: [], dir: 1, tile: null, landing: false };
+export const geese = { state: 'away', timer: 0, birds: [], dir: 1, tile: null, landing: false, menace: false, check: '' };
 const landingTiles = () => walkTiles.filter(([c, r]) => r === 14 && c >= 3 && c <= 12);
 export function spawnGeese(forceLanding = false) {
   geese.dir = Math.random() < 0.5 ? 1 : -1; geese.landing = forceLanding || Math.random() < 0.55; geese.state = 'flying';
@@ -146,10 +153,10 @@ export function spawnGeese(forceLanding = false) {
   geese.birds = Array.from({ length: n }, (_, i) => { const k = Math.ceil(i / 2), side = i % 2 ? 1 : -1; return { x: x0 - geese.dir * k * 5, y: y0 + k * 2 * (side > 0 ? 1 : 0.6), gx: 0, gy: 0, wait: 0, say: '', flip: geese.dir < 0 }; });
   if (geese.landing) { geese.tile = pick(landingTiles()); if (!geese.tile) geese.landing = false; }
 }
-export function flushGeese() { geese.state = 'leaving'; geese.dir = 1; for (const g of geese.birds) { g.say = '🎺'; g.flip = false; } }
+export function flushGeese() { if (geese.state === 'away') return; if (geese.menace) endMenace(); geese.state = geese.state === 'flying' ? 'leaving' : 'leaving'; geese.dir = 1; for (const g of geese.birds) { g.say = '🎺'; g.flip = false; } }
 export function tickGeese(dt) {
   geese.timer -= dt;
-  if (geese.state === 'away') { if (geese.timer <= 0 && night() < 0.7 && !wet()) spawnGeese(); return; }
+  if (geese.state === 'away') return;                       // geese only come when a check is running (events.js)
   if (geese.state === 'flying') {
     for (const g of geese.birds) g.x += geese.dir * 22 * dt;
     const lead = geese.birds[0];
@@ -159,13 +166,17 @@ export function tickGeese(dt) {
   }
   if (geese.state === 'landing') {
     let done = true; for (const g of geese.birds) if (!moveToward(g, g.gx, g.gy, 28, dt)) done = false;
-    if (done) { geese.state = 'landed'; geese.timer = rnd(20, 45); for (const g of geese.birds) g.say = Math.random() < 0.4 ? '🎺' : ''; }
+    if (done) { geese.state = 'landed'; geese.timer = 180; for (const g of geese.birds) g.say = Math.random() < 0.4 ? '🎺' : ''; }   // stay until the check reports (or give up after 3 min)
     return;
   }
   if (geese.state === 'landed') {
     for (const g of geese.birds) {
-      if ((g.wait -= dt) <= 0) { g.gx = clamp(g.x + rnd(-6, 6), geese.tile[0] * T - 12, geese.tile[0] * T + 20); g.gy = clamp(g.y + rnd(-2, 2), 14 * T + 1, 14 * T + 7); g.wait = rnd(1, 4); g.say = Math.random() < 0.08 ? '🎺' : ''; }
-      if (Math.hypot(g.gx - g.x, g.gy - g.y) > 0.5) moveToward(g, g.gx, g.gy, 6, dt, 0.5);
+      if ((g.wait -= dt) <= 0) {
+        if (geese.menace) { const t = pick(walkTiles); g.gx = tileX(t[0]) + rnd(-3, 3); g.gy = tileY(t[1]); g.wait = rnd(0.5, 2); g.hop = Math.random() < 0.6; }   // roam the whole town, hopping over whatever is in the way
+        else { g.gx = clamp(g.x + rnd(-6, 6), geese.tile[0] * T - 12, geese.tile[0] * T + 20); g.gy = clamp(g.y + rnd(-2, 2), 14 * T + 1, 14 * T + 7); g.wait = rnd(1, 4); }
+        g.say = Math.random() < 0.08 ? '🎺' : '';
+      }
+      if (Math.hypot(g.gx - g.x, g.gy - g.y) > 0.5) moveToward(g, g.gx, g.gy, geese.menace ? (g.hop ? 55 : 24) : 6, dt, 0.5);
     }
     // hiss at people who get too close; they back off
     for (const p of people) {
@@ -174,9 +185,22 @@ export function tickGeese(dt) {
       g.say = '🔪'; g.flip = p.x < g.x;
       if (p.act === 'idle' || p.act === 'fish') { p.say = '😬'; send(p, 'flee', pick(walkTiles.filter(t => Math.hypot(t[0] * T - p.x, t[1] * T - p.y) > 30)), 'getting away from the geese'); p.say = '😬'; }
     }
+    if (geese.menace) menace();
     if (geese.timer <= 0) flushGeese();
     return;
   }
   if (geese.state === 'leaving') { for (const g of geese.birds) { g.x += 30 * dt; g.y -= 14 * dt; if (g.y < 6) g.y = 6; } if (geese.birds[0].x > W + 40) { geese.state = 'away'; geese.timer = rnd(90, 240); } }
 }
+// failed check: the flock turns on the town; everyone bolts for home and hides until the geese leave
+function menace() {
+  for (const g of geese.birds) if (Math.random() < 0.05) g.say = pick(['🔪', '🎺', '😠']);
+  for (const d of dogs) if (!d.lying && geese.birds.some(g => Math.hypot(g.x - d.x, g.y - d.y) < 8)) { d.say = '😨'; d.wait = 0; }
+  for (const p of people) {
+    if (p.inside || p.intent === 'hide' || p.bike) continue;
+    p.route = []; p.say = pick(['😱', '😨', '🏃']); p.group = null; p.joining = null;
+    if (p.visitor) send(p, 'hide', doorOf(pick(bType('cafe'))), 'fleeing the geese'); else send(p, 'hide', doorOf(p.home), 'fleeing the geese');
+  }
+}
+export function startMenace() { geese.menace = true; }
+export function endMenace() { geese.menace = false; for (const p of people) if (p.desc === 'hiding from the geese') p.wait = rnd(1, 6); }
 export const geeseOnGround = () => geese.state === 'landed' || geese.state === 'landing';

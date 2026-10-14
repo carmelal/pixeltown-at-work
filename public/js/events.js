@@ -2,10 +2,11 @@
 import { rnd, pick } from './util.js';
 import { mode, weather, rollWeather, WICON, bType, doorOf, walkTiles, clock, SEASON, SEASONS, setSeason, fountain } from './world.js';
 import { people, clearGroups, leaveGroup, leave, send, sendToWork } from './people.js';
-import { geese, spawnGeese } from './animals.js';
+import { geese, spawnGeese, flushGeese, startMenace } from './animals.js';
 import { bus, summonBus, burst, deliverMail } from './town.js';
 import { ri } from './util.js';
-import { coffeeRun } from './people.js';
+import { coffeeRun, tidyUp } from './people.js';
+import { buildings } from './world.js';
 
 export function say() {}                                        // banners are gone; the dev status line is the only readout
 
@@ -20,8 +21,8 @@ const HANDLERS = {
   push: () => { deliverMail(); react(['👋'], 0.3); },
   merge: () => summonBus(ri(3, 5)),                                                       // a busload of visitors arrives
   checkout: ev => { react(['🔀'], 0.4); say('🔀 ' + (ev.msg || 'checkout')); },
-  pull: (ev, msg) => { react(['📥'], 0.4); say('📥 pulled' + msg); },
-  rebase: (ev, msg) => { react(['🔄'], 0.3); say('🔄 rebased' + msg); },
+  pull: () => deliverMail(pick(buildings)),                                               // one big package for somebody
+  rebase: () => tidyUp(),                                                                 // sweeping and watering (shovelling in winter)
   reset: (ev, msg) => { react(['😬'], 0.3); say('⏪ reset' + msg); },
   editing: ev => {                                               // light an office and send a few idle people to it
     // about half of everyone outside heads for an office (spread across all of them), unless mid-ride or already at work
@@ -38,6 +39,10 @@ const HANDLERS = {
   season: ev => setSeason(ev.msg === 'reset' ? 'reset' : SEASONS.includes(ev.msg) ? ev.msg : SEASONS[(SEASONS.indexOf(SEASON) + 1) % 4]),   // cycle seasons (msg: name, or 'reset')
   time: ev => { clock.offsetHours = ev.msg === 'reset' ? 0 : (clock.offsetHours + (Number(ev.msg) || 3)) % 24; },   // advance the town clock (msg: hours, or 'reset')
   geese: () => { if (geese.state === 'away') spawnGeese(true); },
+  // checks (tests, lint, typecheck, ci): geese arrive when one starts, leave when it passes, turn on the town when it fails
+  check_start: ev => { geese.check = ev.msg || 'tests'; if (geese.state === 'away') spawnGeese(true); },
+  check_pass: () => flushGeese(),
+  check_fail: ev => { geese.check = ev.msg || 'tests'; if (geese.state === 'away') spawnGeese(true); startMenace(); setTimeout(flushGeese, 20000); },
 };
 
 let statusEl = null, connected = false, lastSignal = '';

@@ -1,6 +1,6 @@
 // how everything looks. Each draw function takes the entity (and night level n / time now where needed) and paints with px().
 import { clamp, hash, lerp } from './util.js';
-import { T, W, H, SKY, SEASON, PAL, weather, wet, hourNow, nowDate, HEIGHTS, isOpen, pond, fountain, benches, flowers, LANE, BUS_STOP, BUS_WAIT, mode } from './world.js';
+import { T, W, H, SKY, SEASON, PAL, weather, wet, hourNow, nowDate, HEIGHTS, isOpen, pond, fountain, benches, beds, LANE, BUS_STOP, BUS_WAIT, mode } from './world.js';
 import { ctx, px, shade, rgbn, grey, label, bubble, blit } from './canvas.js';
 import { geese } from './animals.js';
 
@@ -74,6 +74,7 @@ export function drawPerson(p, now) {
   else if (p.act === 'sit') blit(PERSON.sit, x, yy, pal);
   else blit(step ? PERSON.step : PERSON.stand, x, yy - 1, pal);
   if (p.hat || (SEASON === 'winter' && hash(p.name) % 2)) px(x - 1, yy - 2, p.hatColor || (SEASON === 'winter' ? p.shirt : '#333'), 5, 1);
+  if (p.pkg) { px(x - 2, yy - 7, '#b8863b', 7, 5); px(x - 2, yy - 5, '#d9a65a', 7, 1); px(x + 1, yy - 7, '#d9a65a', 1, 5); }   // big parcel carried overhead
   bubble(p.say, x + 1.5, yy - 4, 5);
 }
 
@@ -126,7 +127,8 @@ export function drawDuck(d, now) {                                              
 }
 export function drawGoose(g, now) {
   const x = Math.round(g.x), y = Math.round(g.y), pal = { B: '#6e6358', w: '#eee', n: '#1a1a1a', f: '#333' };
-  if (geese.state === 'landed' || geese.state === 'landing') blit(GOOSE.ground, leftOf(GOOSE.ground, GOOSE.ox, x, g.flip), y - 4, pal, g.flip);
+  const airborne = geese.menace && g.hop && Math.hypot(g.gx - g.x, g.gy - g.y) > 4;
+  if ((geese.state === 'landed' && !airborne) || geese.state === 'landing') blit(GOOSE.ground, leftOf(GOOSE.ground, GOOSE.ox, x, g.flip), y - 4, pal, g.flip);
   else { const rows = ((now / 500 + x / 20) % 1) < 0.5 ? GOOSE.flyUp : GOOSE.flyDown; blit(rows, leftOf(rows, 1, x, g.flip), y - 1, { ...pal, w: pal.B }, g.flip); }
   bubble(g.say, x, y - 6);
 }
@@ -142,6 +144,12 @@ export function drawTree(c, r, n) {
   px(x + 3, y - 1, dark, 7, 3); px(x + 8, y - 5, dark, 2, 4); px(x - 1, y - 7, light, 4, 2); px(x + 1, y - 9, light, 3, 1);   // shading
   if (SEASON === 'spring') { px(x, y - 6, '#f9c', 1, 1); px(x + 5, y - 8, '#f9c', 1, 1); px(x + 8, y - 3, '#f9c', 1, 1); px(x + 2, y - 2, '#fff', 1, 1); }
   if (SEASON === 'autumn') { px(x + 1, y - 4, '#d44', 1, 1); px(x + 7, y - 7, '#e83', 1, 1); px(x + 4, y - 3, '#fb4', 1, 1); }
+}
+export function drawBlanket(b) {                                                 // red and white check with a basket
+  const x = Math.round(b.x) - 6, y = Math.round(b.y) - 2;
+  for (let i = 0; i < 12; i++) for (let j = 0; j < 5; j++) px(x + i, y + j, ((i >> 1) + (j >> 1)) % 2 ? '#e44' : '#fff', 1, 1);   // 2x2 checks
+  px(x + 1, y + 1, '#8a5a2b', 3, 2); px(x + 2, y, '#b8863b', 1, 1);                                                    // basket at one corner
+  px(x + 8, y + 2, '#f4f4f4', 2, 1); px(x + 8, y + 3, '#fd6', 1, 1);                                                    // a plate with something on it
 }
 export function drawDock(d) {                                                    // bikeshare rail with however many bikes are docked
   const x = d.c * T, y = d.r * T;
@@ -213,10 +221,26 @@ export function drawGround(n, now) {
   ctx.fillStyle = grey(84, n); ctx.beginPath(); ctx.moveTo(LANE.c * T, H); ctx.quadraticCurveTo(LANE.c * T, LANE.r * T, LANE.c * T + 16, LANE.r * T); ctx.lineTo(W, LANE.r * T); ctx.lineTo(W, H); ctx.closePath(); ctx.fill();
   ctx.strokeStyle = grey(150, n); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(LANE.c * T + 0.5, H); ctx.quadraticCurveTo(LANE.c * T + 0.5, LANE.r * T + 0.5, LANE.c * T + 16, LANE.r * T + 0.5); ctx.lineTo(W, LANE.r * T + 0.5); ctx.stroke();
   // plaza flowerbeds, fountain, benches
-  if (SEASON !== 'winter') for (const [c, r] of flowers) for (let i = 0; i < 3; i++) px(c * T + 1 + i * 3, r * T + 3 + (i % 2) * 2, SEASON === 'spring' ? ['#f7a', '#fd6', '#fff'][(c * 5 + i) % 3] : SEASON === 'summer' ? '#e44' : '#c84', 1, 1);
+  for (const b of beds) drawBed(b, n);
   px(fountain.c * T + 1, fountain.r * T + 1, '#889', 14, 14); px(fountain.c * T + 3, fountain.r * T + 3, PAL.snow ? '#cde' : '#5ac', 10, 10);
   if (!PAL.snow) { const big = now < fountain.sprayUntil; px(fountain.c * T + 7, fountain.r * T + (big ? -4 : 3) + Math.round(Math.sin(now / 90)), '#cff', 2, big ? 11 : 4); if (big) { px(fountain.c * T + 4, fountain.r * T - 1 + Math.round(Math.sin(now / 70)), '#cff', 1, 3); px(fountain.c * T + 11, fountain.r * T - 1 + Math.round(Math.cos(now / 70)), '#cff', 1, 3); } }
+  if (PAL.snow) for (let i = 0; i < 14; i++) px((i * 53 + 7) % W, 14 * T + 1 + (i * 3) % 6, i % 3 ? '#a6d' : '#c8f', 1, 1);   // crocuses here and there on the park row
   for (const [c, r] of benches) { px(c * T + 1, r * T + 4, '#6b4a2a', 6, 2); px(c * T + 1, r * T + 6, '#4a3018', 1, 1); px(c * T + 6, r * T + 6, '#4a3018', 1, 1); }
+}
+// a raised bed: stone border, dark soil, two staggered rows of flowers on stems (colours fixed per position, seasonal)
+const BLOOMS = { spring: ['#f7a', '#fd6', '#fff', '#c9f'], summer: ['#e44', '#f80', '#fd3', '#f5a'], autumn: ['#c84', '#a63', '#e93', '#875'], winter: [] };
+function drawBed(b, n) {
+  const x = b.c * T, y = b.r * T, w = b.w * T;
+  const watered = performance.now() < b.wateredUntil, soil = watered ? 0.7 : 1;
+  px(x, y, grey(150, n), w, T); px(x + 1, y + 1, `rgb(${(74 - 30 * n) * soil},${(50 - 20 * n) * soil},${(32 - 12 * n) * soil})`, w - 2, T - 2);     // border and soil (darker when wet)
+  if (PAL.snow) { px(x + 1, y + 1, `rgb(${225 - 70 * n},${228 - 70 * n},${235 - 70 * n})`, w - 2, 2); for (let i = 1; i < w - 1; i += 3) if ((b.c + i) % 2) px(x + i, y + 4 + (i % 2), '#a6d', 1, 1); return; }   // winter: crocuses poking through
+  const cols = BLOOMS[SEASON], stem = `rgb(${40 - 15 * n},${110 - 50 * n},${50 - 20 * n})`;
+  for (let i = 1; i < w - 1; i += 2) {
+    const back = (i >> 1) % 2 === 0, fy = y + (back ? 2 : 4), col = cols[(b.c * 7 + i * 3) % cols.length];
+    px(x + i, fy + 1, stem, 1, back ? 3 : 2); px(x + i, fy, col, 1, 1);
+    if (watered) px(x + i + (i % 2 ? 1 : -1), fy, col, 1, 1);                                                  // fuller blooms for a while after watering
+    if (SEASON === 'spring' && i % 3 === 0) px(x + i, fy - 1, '#fff', 1, 1);
+  }
 }
 export function drawParticle(f) {
   if (f.k === 'rain') px(f.x, f.y, 'rgba(170,200,240,0.8)', 1, 3);

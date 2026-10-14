@@ -1,14 +1,16 @@
 // townspeople: state, intents (what they set out to do), arrivals (what happens when they get there), chat groups
-import { rnd, pick, hash, weighted } from './util.js';
-import { T, tileX, tileY, SKY, SEASON, hourNow, night, weather, wet, buildings, VISITS, isOpen, benches, docks, FOUNTAIN_VIEWS, PLAZA, BUS_WAIT,
+import { rnd, ri, pick, hash, weighted } from './util.js';
+import { T, COLS, tileX, tileY, SKY, SEASON, hourNow, night, weather, wet, buildings, VISITS, isOpen, benches, docks, beds, FOUNTAIN_VIEWS, PLAZA, BUS_WAIT,
   walkable, walkTiles, pondSide, treeSpots, doorOf, bType, spotsAround, buildingAt, path, followRoute, mode } from './world.js';
-import { dogs, nearestDog, ducks } from './animals.js';
+import { dogs, nearestDog, ducks, geese } from './animals.js';
 import { bus } from './town.js';
 
 export const TOPICS = ['☕️', '🍕', '🐶', '🌧️', '💻', '🎮', '📺', '🚲', '🏠', '😂', '🤔', '💸', '🎂', '✈️', '📚', '🧦'];
 const NAMES = ['ada', 'bo', 'cy', 'dot', 'eli', 'fay', 'gus', 'hal', 'ivy', 'jo', 'kit', 'lou', 'mo', 'nan', 'oz', 'pip'];
 export const people = [];
-export const coffeeRun = { until: 0 };                       // set by the editing signal
+export const coffeeRun = { until: 0 };
+export const picnics = [];                                   // blankets on the hill: { x, y, until }
+const SNACKS = ['🥪', '🍎', '🧃', '🧀', '🥐', '🥦'];
 
 function addPerson(name) {
   const homes = buildings.filter(b => b.type === 'house' || b.type === 'apartment'), h = hash(name), home = homes[h % homes.length], [c, r] = doorOf(home);
@@ -60,6 +62,11 @@ export const INTENTS = {
   fish:     { w: 4.5, when: () => SEASON !== 'winter' && pondSide.length > 0, go: p => send(p, 'fish', pick(pondSide), 'going fishing'),
               arrive: p => { p.act = 'fish'; p.desc = 'fishing'; p.wait = rnd(15, 35); p.fishT = rnd(3, 8); p.flip = false; } },
   bike:     { w: 3,  go: p => { const d = pick(docks.filter(d => d.bikes > 0)); return !!d && send(p, 'bike', [d.c, d.r], 'going to grab a bike'); }, arrive: bikeArrive },
+  water:    { w: 0,  go: p => { const b = pick(beds.filter(b => performance.now() > b.wateredUntil)); if (!b) return false; const s = bedSpots(b); return s.length && send(p, 'water', pick(s), 'going to water the flowers', b); },
+              arrive: p => { const b = p.data; p.act = 'idle'; p.desc = 'watering the flowers'; p.say = '🪣'; p.wait = rnd(4, 8); p.flip = p.x > (b.c + b.w / 2) * T; b.wateredUntil = performance.now() + 90000; } },
+  sweep:    { w: 0,  go: p => { const r = pick([6, 10]); return send(p, 'sweep', [0, r], SEASON === 'winter' ? 'going to shovel the footpath' : 'going to sweep the footpath', { row: r, passes: 2 }) && (p.say = SEASON === 'winter' ? '🪏' : '🧹', true); },
+              arrive: p => { const d = p.data; if (d.passes > 0) { d.passes--; const end = p.c === 0 ? COLS - 1 : 0; if (send(p, 'sweep', [end, d.row], SEASON === 'winter' ? 'shovelling the footpath' : 'sweeping the footpath', d)) { p.say = SEASON === 'winter' ? '🪏' : '🧹'; p.data = d; return; } } idle(p, 'done tidying', [2, 4], '😮‍💨'); } },
+  picnic:   { w: 3.5, when: () => !wet() && night() < 0.5, go: startPicnic, arrive: p => { p.act = 'sit'; p.desc = `having a picnic with ${p.data.with.name}`; p.wait = p.data.secs; p.snackT = rnd(2, 6); p.flip = p.x > p.data.blanket.x; } },
   chat:     { w: 5.5, go: startChat,                                                                           arrive: joinChat },
   hall:     { w: 7,  go: p => toDoor(p, 'hall', 'hall', 'visiting town hall'),                               arrive: (p, here) => enter(p, here, [4, 10], 'inside town hall') },
   // intents that are only ever set directly (routine, weather, events, other actors)
@@ -67,18 +74,35 @@ export const INTENTS = {
   shelter:  { w: 0,  arrive: p => idle(p, 'sheltering under a tree', [8, 20], '☔️') },
   gather:   { w: 0,  arrive: p => idle(p, 'at the gathering', [1, 3]) },
   flee:     { w: 0,  arrive: p => idle(p, 'catching their breath', [2, 4]) },
+  hide:     { w: 0,  arrive: (p, here) => here ? enter(p, here, 1e9, 'hiding from the geese') : idle(p, 'cowering', [3, 6], '😨') },
   ride:     { w: 0,  arrive: bikeArrive },
 };
+const bedSpots = b => { const out = []; for (let c = b.c; c < b.c + b.w; c++) for (const t of [[c, b.r - 1], [c, b.r + 1]]) if (walkable(...t)) out.push(t); return out; };
+// two people take a blanket up to the brow of the hill and sit either side of it
+function startPicnic(p) {
+  const q = pick(people.filter(o => o !== p && o.act === 'idle' && !o.inside && !o.joining && !o.bike));
+  const hill = walkTiles.filter(([, r]) => r === SKY), pairs = hill.filter(([c, r]) => hill.some(([c2, r2]) => c2 === c + 2 && r2 === r));   // two tiles with one between for the blanket
+  if (!q || !pairs.length) return false;
+  const [c, r] = pick(pairs), blanket = { x: tileX(c + 1), y: tileY(r) + 2, tile: [c + 1, r], until: performance.now() + 60000 }, secs = rnd(25, 45);
+  if (!send(p, 'picnic', [c, r], 'heading up the hill for a picnic', { with: q, blanket, secs })) return false;
+  if (!send(q, 'picnic', [c + 2, r], 'heading up the hill for a picnic', { with: p, blanket, secs })) { p.route = []; return false; }
+  blanket.until = performance.now() + (secs + 30) * 1000; picnics.push(blanket); return true;
+}
 function lookArrive(p) { idle(p, `looking at ${p.data}`, [4, 8], '👀'); }
+// a ride is a few random destinations around town, a short pause at each, then back to the rack
+const farTile = p => pick(walkTiles.filter(t => Math.hypot(t[0] - p.c, t[1] - p.r) > 6)) || pick(walkTiles);
+function rideOn(p) {
+  if (p.rideStops > 0) { p.rideStops--; return send(p, 'ride', farTile(p), 'riding around on a bike'); }
+  const dock = docks[0]; return send(p, 'ride', [dock.c, dock.r], 'riding back to the rack');
+}
 function bikeArrive(p) {
   const dock = docks.find(d => d.c === p.c && d.r === p.r);
-  if (!dock) return idle(p, 'standing around');
-  if (p.bike) { dock.bikes++; p.bike = false; return idle(p, 'just docked a bike', [1, 3], '🚲'); }
-  if (dock.bikes > 0) {
-    dock.bikes--; p.bike = true; const other = docks.find(d => d !== dock);
-    if (send(p, 'ride', [other.c, other.r], 'riding a bike across town')) return;
-    dock.bikes++; p.bike = false;
+  if (p.bike) {
+    if (dock && p.rideStops <= 0) { dock.bikes++; p.bike = false; return idle(p, 'just docked a bike', [1, 3], '🚲'); }
+    const [desc, say] = pick([['stopping to look around', '👀'], ['catching their breath', '😮‍💨'], ['ringing the bell', '🔔'], ['enjoying the ride', '']]); p.act = 'ride'; p.desc = desc; p.say = say; p.wait = rnd(2, 5); return;   // choose() continues the ride
   }
+  if (!dock) return idle(p, 'standing around');
+  if (dock.bikes > 0) { dock.bikes--; p.bike = true; p.rideStops = ri(2, 4); if (rideOn(p)) return; dock.bikes++; p.bike = false; }
   idle(p, 'no bikes left', [2, 4], '😕');
 }
 
@@ -93,6 +117,8 @@ const URGES = [
 ];
 
 export function choose(p) {
+  if (p.bike) { if (rideOn(p) === false) { p.bike = false; docks[0].bikes++; } else return; }   // mid-ride: keep riding (bike teleports home if stuck)
+  if (geese.menace) { p.say = '😨'; p.wait = 2; return; }                                  // nobody goes out while the geese are on the warpath
   if (p.visitor && performance.now() > p.leaveAt) { if (send(p, 'bus', pick(BUS_WAIT), 'heading for the bus home')) return; }
   if (p.urge === 'break') { p.urge = null; const ok = Math.random() < 0.65 ? INTENTS.chat.go(p) : INTENTS.ducks.go(p); if (ok !== false) { p.desc = p.desc.replace('going', 'on a break, going'); return; } }
   if (mode.current === 'gathering') { const t = [Math.floor(rnd(PLAZA.c0 + 1, PLAZA.c1)), Math.floor(rnd(PLAZA.r0 + 1, PLAZA.r1 + 1))]; if (walkable(...t)) send(p, 'gather', t, 'heading to the gathering'); p.wait = rnd(1, 3); return; }
@@ -106,7 +132,7 @@ export function arrived(p) {
   const here = buildingAt(p.c, p.r), intent = INTENTS[p.intent];
   p.intent = null;
   if (intent?.arrive) intent.arrive(p, here); else idle(p, 'standing around');
-  p.data = null;
+  if (!p.route.length) p.data = null;
 }
 
 // ---------- chat groups ----------
@@ -153,6 +179,12 @@ export function leave(p) {
 }
 
 // ---------- per-frame ----------
+export function tickPicnics() { for (let i = picnics.length - 1; i >= 0; i--) if (performance.now() > picnics[i].until) picnics.splice(i, 1); }
+export function tidyUp() {                                                      // rebase: one sweeps (or shovels), another waters the beds (not in winter)
+  const free = people.filter(p => !p.inside && !p.bike && p.act === 'idle');
+  const a = free.shift(); if (a) INTENTS.sweep.go(a);
+  const b = free.shift(); if (b) { if (SEASON === 'winter' || wet()) INTENTS.sweep.go(b); else INTENTS.water.go(b); }
+}
 export function tickPerson(p, dt) {
   p.frame += dt;
   if (p.route.length) {
@@ -162,6 +194,7 @@ export function tickPerson(p, dt) {
   }
   p.wait -= dt;
   if (p.act === 'fish' && p.wait > 0 && (p.fishT -= dt) <= 0) { const r = Math.random(); p.say = r < 0.25 ? pick(['🐟', '🐠']) : r < 0.32 ? '🥾' : ''; if (p.say === '🐟' || p.say === '🐠') for (const k of ducks) if (Math.random() < 0.5) k.say = '🎺'; p.fishT = rnd(3, 8); }
+  if (p.act === 'sit' && p.desc.startsWith('having a picnic') && p.wait > 0 && (p.snackT -= dt) <= 0) { p.say = Math.random() < 0.7 ? pick(SNACKS) : ''; p.snackT = rnd(2, 6); }
   if (p.act === 'chat' && p.wait > 0 && (p.nextSay -= dt) <= 0) { p.say = Math.random() < 0.8 ? pick(TOPICS) : ''; p.nextSay = rnd(2, 5); }
   if (p.wait > 0) return;
   p.say = '';

@@ -72,9 +72,9 @@ export const fountain = { c: 14, r: 7, sprayUntil: 0 };                         
 export const pond = { c: 0, r: 15, w: 14, h: 2 };                       // bottom-left, bleeds off the left and bottom edges
 export const benches = [[11, 8], [18, 8], [2, 14], [10, 14], [15, 15], [26, 14]];
 export const trees = [[14, 15], [16, 15], [17, 15], [16, 8], [12, 7], [10, 7], [19, 7], [4, 2], [9, 2], [21, 2], [27, 2]];   // bank, plaza, back alley (alley trees split it into pockets; only reachable pockets get used)
-export const docks = [{ c: 9, r: 8, bikes: 3 }, { c: 20, r: 8, bikes: 3 }];   // bikeshare, one each side of the plaza
+export const docks = [{ c: 9, r: 8, bikes: 4 }];   // bikeshare rack on the plaza
 export const lamps = [[1, 6], [8, 6], [15, 6], [22, 6], [29, 6], [4, 10], [11, 10], [18, 10], [25, 10]];
-export const flowers = [[9, 9], [10, 9], [19, 9], [20, 9], [9, 7], [20, 7]];
+export const beds = [{ c: 9, r: 9, w: 3 }, { c: 18, r: 9, w: 3 }, { c: 9, r: 7, w: 1 }, { c: 20, r: 7, w: 1 }].map(b => ({ ...b, wateredUntil: 0 }));   // plaza flowerbeds (one tile tall, not walkable)
 export const PLAZA = { c0: 9, c1: 20, r0: 7, r1: 9 };
 export const FOUNTAIN_VIEWS = [[13, 9], [16, 9], [13, 6], [16, 6]];
 export const LANE = { c: 18, r: 15 };                                   // bus lane: rows 15-16 from col 18 to the right edge, entering from the bottom
@@ -86,6 +86,7 @@ for (let c = 0; c < COLS; c++) { for (let r = 0; r < SKY; r++) blocked.add(key(c
 for (let c = 0; c < 2; c++) for (let r = 0; r < 2; r++) blocked.add(key(fountain.c + c, fountain.r + r));
 for (let c = 0; c < pond.w; c++) for (let r = 0; r < pond.h; r++) blocked.add(key(pond.c + c, pond.r + r));
 for (const [c, r] of trees) blocked.add(key(c, r));
+for (const b of beds) for (let c = b.c; c < b.c + b.w; c++) blocked.add(key(c, b.r));
 
 export const walkable = (c, r) => c >= 0 && r >= 0 && c < COLS && r < ROWS && !blocked.has(key(c, r));
 export const doorOf = b => [b.c + Math.floor(b.w / 2), b.r + b.h];       // tile just below the door
