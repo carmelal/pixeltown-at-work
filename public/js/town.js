@@ -177,7 +177,7 @@ export function tickCat(dt) {
     if ((cat.flip && cat.x <= cat.tx) || (!cat.flip && cat.x >= cat.tx)) { cat.x = cat.tx; if (cat.sheltering) { cat.sheltering = false; cat.state = 'inside'; cat.desc = 'indoors, waiting out the weather'; return; } if (cat.slinking) { cat.slinking = false; cat.state = 'hidden'; cat.wait = rnd(3, 7); cat.desc = 'somewhere behind the buildings'; return; } cat.state = pick(['sit', 'sit', 'loaf']); cat.wait = rnd(6, 25); cat.desc = cat.state === 'loaf' ? 'loafing on a roof' : 'watching from a roof'; }
     return;
   }
-  if ((cat.wait -= dt) > 0) { if (Math.random() < 0.003) cat.say = cat.say ? '' : pick(cat.state === 'loaf' ? ['💤'] : ['👀', '🐾', '😼']); return; }
+  if ((cat.wait -= dt) > 0) { if (cat.state === 'loaf' && Math.random() < 0.003) cat.say = cat.say ? '' : '💤'; return; }
   cat.say = '';
   if (cat.state === 'hidden') {
     cat.row = cat.nextRow; const b = pick(rowBuildings(cat.row)); cat.x = (b.c + b.w / 2) * T; cat.y = roofY(b);
@@ -212,7 +212,7 @@ export function tickAmbient(dt) {
   for (const b of buildings) if (b.chimney && (b.lit || SEASON === 'winter') && Math.random() < 0.03) particles.push({ k: 'smoke', x: b.c * T + b.w * T - 3, y: b.r * T - 2, vx: rnd(2, 5), vy: -6, t: rnd(1.5, 3) });
   for (let i = particles.length - 1; i >= 0; i--) {
     const f = particles[i];
-    if (f.k === 'confetti') f.vy += 120 * dt; else if (f.k === 'shred') f.vy += 90 * dt;
+    if (f.k === 'confetti') f.vy += 120 * dt; else if (f.k === 'shred' || f.k === 'chip') f.vy += 90 * dt;
     f.x += f.vx * dt; f.y += f.vy * dt; f.t -= dt;
     const precip = f.k === 'rain' || f.k === 'snow';
     if (f.t < 0 || f.y > H || (precip && f.y > SKY * T && f.y > groundHit(f.x))) particles.splice(i, 1);

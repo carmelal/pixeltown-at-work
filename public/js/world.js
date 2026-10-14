@@ -41,6 +41,8 @@ export const WICON = { clear: '☀️', cloudy: '☁️', rain: '🌧️', snow:
 export const mode = { current: 'normal', until: 0 };
 export const cursor = { x: 0, y: 0, active: false };
 export const inquiry = { active: false };
+export const statues = [];                                              // { tile, progress 0..1, done }
+export const STATUE_TILES = [[13, 2], [17, 2], [11, 2], [19, 2]];
 export const reno = { active: false, site: null, pile: 0, pileTile: null, scaffold: 0 };   // scaffold 0..1 goes up as the crew carries materials over   // while `dev server` runs, a crew renovates one building
 export const siteSpots = b => { const out = []; for (let c = b.c - 1; c <= b.c + b.w; c++) if (walkable(c, b.r + b.h)) out.push([c, b.r + b.h]); return out; };
 

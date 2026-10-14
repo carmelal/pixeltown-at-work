@@ -77,6 +77,7 @@ export function drawPerson(p, now) {
     const bob = Math.round(Math.sin(now / 500)); px(x + 7, yy - 1, 'rgba(200,220,255,0.6)', 1, 10 + bob); px(x + 7, yy + 9 + bob, '#e33', 1, 1);
   }
   else if (p.act === 'sit') blit(PERSON.sit, x, yy, pal);
+  else if (p.act === 'carve') blit(Math.floor(p.frame * 5) % 2 ? PERSON.step : PERSON.stand, x, yy - 1, pal);
   else if (p.act === 'work') blit(Math.floor(p.frame * 4) % 2 ? PERSON.step : PERSON.stand, x, yy - 1, pal);
   else blit(step ? PERSON.step : PERSON.stand, x, yy - 1, pal);
   if (p.detective && p.act !== 'sit' && !p.bike) {
@@ -185,6 +186,18 @@ export function drawParcel(p) {
   if (p.chute) { px(x - 3, y - 9, '#e8a040', 7, 2); px(x - 2, y - 11, '#e8a040', 5, 2); px(x - 1, y - 12, '#f4c060', 3, 1); px(x - 3, y - 7, 'rgba(255,255,255,0.5)', 1, 4); px(x + 3, y - 7, 'rgba(255,255,255,0.5)', 1, 4); }
   px(x - 2, y - 3, '#b8863b', 5, 4); px(x - 2, y - 1, '#d9a65a', 5, 1); px(x, y - 3, '#d9a65a', 1, 4);
 }
+export function drawStatue(s) {
+  const x = s.tile[0] * T + 4, y = s.tile[1] * T + 3, stone = '#a9a9b0', dark = '#7e7e86', light = '#d0d0d6';
+  px(x - 4, y - 2, dark, 9, 2); px(x - 3, y - 3, stone, 7, 1);
+  const carved = Math.floor(s.progress * 9);
+  for (let r = 0; r < 9; r++) {
+    const yy = y - 12 + r;
+    if (r >= carved && !s.done) { px(x - 3, yy, stone, 7, 1); continue; }
+    const row = s.shape[r];
+    row.forEach((on, c) => { if (on) px(x - 3 + c, yy, !row[c - 1] || (r > 0 && !s.shape[r - 1][c]) ? light : row[c + 1] ? stone : dark, 1, 1); });
+  }
+  if (s.done) px(x, y - 3, '#c9a060', 1, 1);
+}
 export function drawBlanket(b) {
   const x = Math.round(b.x) - 6, y = Math.round(b.y) - 2;
   for (let i = 0; i < 12; i++) for (let j = 0; j < 5; j++) px(x + i, y + j, ((i >> 1) + (j >> 1)) % 2 ? '#e44' : '#fff', 1, 1);
@@ -286,6 +299,7 @@ export function drawParticle(f) {
   else if (f.k === 'smoke') px(f.x, f.y, `rgba(200,200,210,${clamp(f.t / 3, 0, 0.7)})`, 2, 2);
   else if (f.k === 'leaf') px(f.x, f.y, '#c84');
   else if (f.k === 'splash') px(f.x, f.y, 'rgba(210,235,255,0.9)');
+  else if (f.k === 'chip') px(f.x, f.y, '#c8c8d0', 1, 1);
   else if (f.k === 'shred') px(f.x, f.y, Math.random() < 0.5 ? '#b8863b' : '#d9a65a', 1, 1);
   else if (f.k === 'petal') px(f.x, f.y, '#f9c');
   else px(f.x, f.y, f.c);

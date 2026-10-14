@@ -1,8 +1,8 @@
 import { rnd, ri, pick, hash, weighted } from './util.js';
 import { T, COLS, tileX, tileY, SKY, SEASON, hourNow, night, weather, wet, buildings, VISITS, isOpen, benches, docks, beds, notices,
-  FOUNTAIN_VIEWS, PLAZA, BUS_WAIT, BUS_STOP, walkable, walkTiles, pondSide, treeSpots, doorOf, bType, spotsAround, buildingAt, path, followRoute, mode, inquiry } from './world.js';
+  FOUNTAIN_VIEWS, PLAZA, BUS_WAIT, BUS_STOP, walkable, walkTiles, pondSide, treeSpots, doorOf, bType, spotsAround, buildingAt, path, followRoute, mode, inquiry, statues, STATUE_TILES } from './world.js';
 import { nearestDog, ducks, geese } from './animals.js';
-import { bus, parcels, takeParcel } from './town.js';
+import { bus, parcels, takeParcel, particles } from './town.js';
 
 const TOPICS = ['☕️', '🍕', '🐶', '🌧️', '💻', '🎮', '📺', '🚲', '🏠', '😂', '🤔', '💸', '🎂', '✈️', '📚', '🧦'];
 const SNACKS = ['🥪', '🍎', '🧃', '🧀', '🥐', '🥦'];
@@ -53,6 +53,7 @@ const look = (p, tile, what) => send(p, 'look', tile, `going to look at ${what}`
 const lookArrive = p => idle(p, `looking at ${p.data}`, [4, 8], '👀');
 const bedSpots = b => { const out = []; for (let c = b.c; c < b.c + b.w; c++) for (const t of [[c, b.r - 1], [c, b.r + 1]]) if (walkable(...t)) out.push(t); return out; };
 const faceBed = (p, b) => { p.flip = p.x > (b.c + b.w / 2) * T; };
+export const absorbed = p => p.act === 'carve' || p.detective;
 export const freePerson = () => pick(people.filter(p => !p.inside && !p.bike && p.act === 'idle'));
 
 // ---------- intents: weight (0 = only triggered directly), optional condition, how to set off, what happens on arrival ----------
@@ -121,6 +122,11 @@ export const INTENTS = {
     w: 0,
     go: p => { const [tile, what] = pick(CLUES); return send(p, 'inspect', tile, 'investigating something suspicious', what); },
     arrive: p => { idle(p, 'investigating something suspicious', [4, 9], pick(['🔍', '🔍', '🤔', '🧐'])); p.flip = Math.random() < 0.5; },
+  },
+  carve: {
+    w: 0,
+    go: p => { const s = p.data; const spot = spotsAround(...s.tile)[0]; return !!spot && send(p, 'carve', spot, 'off to carve a statue', s); },
+    arrive: p => { p.act = 'carve'; p.statue = p.data; p.desc = 'carving a statue'; p.say = '🔨'; p.wait = 1e9; p.flip = p.x > tileX(p.statue.tile[0]); },
   },
   picnic: { w: 0, go: startPicnic, arrive: p => { p.act = 'sit'; p.desc = `having a picnic with ${p.data.with.name}`; p.wait = p.data.secs; p.snackT = rnd(2, 6); p.flip = p.x > p.data.blanket.x; } },
   home: { w: 0, arrive: p => enter(p, p.home, p.data?.secs ?? rnd(10, 40), p.data?.desc ?? (night() > 0.6 ? 'asleep at home' : 'at home')) },
@@ -274,6 +280,33 @@ export function bikeRide(n) {
   const free = people.filter(p => !p.inside && !p.bike && p.act === 'idle' && !p.visitor).sort(() => Math.random() - 0.5);
   for (const p of free.slice(0, Math.min(n, docks[0].bikes))) INTENTS.bike.go(p);
 }
+// an abstract lump carved from the seed: a 7x9 blob, each row a random width around a wandering centre, wider at the bottom
+function statueShape(seed) {
+  let bits = seed;
+  const rnd = () => { bits = Math.imul(bits ^ (bits >>> 15), 2246822519) >>> 0; return (bits >>> 8) / 16777216; };
+  const rows = [];
+  let centre = 3;
+  for (let r = 0; r < 9; r++) {
+    const width = 1 + Math.floor(rnd() * 2) + Math.floor(r / 3) + (r === 8 ? 1 : 0);
+    centre = Math.max(1, Math.min(5, centre + Math.floor(rnd() * 3) - 1));
+    const row = Array(7).fill(0);
+    for (let c = Math.max(0, centre - (width >> 1)); c <= Math.min(6, centre + (width >> 1)); c++) row[c] = 1;
+    if (r > 0 && rnd() < 0.3) row[Math.floor(rnd() * 7)] = 1;
+    rows.push(row);
+  }
+  return rows;
+}
+export function commissionStatue() {
+  const free = freePerson() || pick(people.filter(p => !p.inside && !p.bike));
+  if (!free) return;
+  const used = new Set(statues.map(s => s.tile.join())), tile = STATUE_TILES.find(t => !used.has(t.join())) || statues.shift().tile;
+  const s = { tile, progress: 0, done: false, sculptor: free, shape: statueShape(hash(`${Date.now()}:${tile}`)) };
+  statues.push(s);
+  free.route = [];
+  if (free.group) leaveGroup(free);
+  free.data = s;
+  if (!INTENTS.carve.go(free)) statues.splice(statues.indexOf(s), 1);
+}
 export function startInquiry() {
   inquiry.active = true;
   const free = people.filter(p => !p.inside && !p.bike && p.act === 'idle' && !p.visitor).sort(() => Math.random() - 0.5).slice(0, 3);
@@ -300,6 +333,13 @@ export function tickPerson(p, dt) {
     return;
   }
   p.wait -= dt;
+  if (p.act === 'carve') {
+    const s = p.statue;
+    s.progress = Math.min(1, s.progress + dt / 40);
+    if (Math.random() < 0.08) { p.say = pick(['🔨', '🔨', '⚒️', '']); particles.push({ k: 'chip', x: tileX(s.tile[0]) + rnd(-3, 3), y: tileY(s.tile[1]) - rnd(7, 13), vx: rnd(-20, 20), vy: rnd(-30, 0), t: rnd(0.4, 0.9) }); }
+    if (s.progress >= 1) { s.done = true; p.statue = null; idle(p, 'admiring the statue', [4, 8], '🧐'); }
+    return;
+  }
   if (p.wait > 0) {
     if (p.act === 'fish' && (p.fishT -= dt) <= 0) {
       const r = Math.random();

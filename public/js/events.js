@@ -1,10 +1,10 @@
 import { rnd, ri, pick } from './util.js';
 import { mode, weather, rollWeather, WICON, bType, buildings, clock, SEASON, SEASONS, setSeason, fountain } from './world.js';
-import { people, clearGroups, leaveGroup, leave, sendToWork, coffeeRun, tidyUp, pinNotice, freePerson, INTENTS, bikeRide, startInquiry, endInquiry } from './people.js';
+import { people, clearGroups, leaveGroup, leave, sendToWork, coffeeRun, tidyUp, pinNotice, freePerson, absorbed, INTENTS, bikeRide, startInquiry, endInquiry, commissionStatue } from './people.js';
 import { geese, spawnGeese, flushGeese, startMenace } from './animals.js';
 import { bus, summonBus, burst, deliverMail, startReno, endReno, airDrop } from './town.js';
 
-const outside = () => people.filter(p => !p.inside);
+const outside = () => people.filter(p => !p.inside && !absorbed(p));
 function react(emojis, share = 1, hold = 2) { for (const p of outside()) if (Math.random() < share) { p.say = pick(emojis); p.wait = Math.max(p.wait, hold); } }
 function setMode(m, secs) { mode.current = m; mode.until = performance.now() + secs * 1000; clearGroups(); }
 const repoOf = ev => (ev.msg || '').split(/[:→]/)[0].trim();
@@ -41,13 +41,15 @@ const HANDLERS = {
   check_fail: ev => { geese.check = ev.msg || 'tests'; if (geese.state === 'away') spawnGeese(true); startMenace(); setTimeout(flushGeese, 20000); },
   server_start: () => startReno(),
   server_stop: () => endReno(),
+  pr_start: () => commissionStatue(),
+  pr_stop: () => {},
   console_start: () => startInquiry(),
   console_stop: () => endInquiry(),
   up_start: () => airDrop(ri(4, 7)),
   up_stop: () => {},
   // town
-  gathering: () => { setMode('gathering', 25); for (const p of people) { if (p.inside === bus) continue; if (p.inside) leave(p); p.route = []; p.wait = rnd(0, 2); } },
-  nap: () => { setMode('nap', 20); for (const p of people) if (p.inside !== bus) { p.route = []; p.wait = 0; } },
+  gathering: () => { setMode('gathering', 25); for (const p of people) { if (p.inside === bus || absorbed(p)) continue; if (p.inside) leave(p); p.route = []; p.wait = rnd(0, 2); } },
+  nap: () => { setMode('nap', 20); for (const p of people) if (p.inside !== bus && !absorbed(p)) { p.route = []; p.wait = 0; } },
   wake: () => { mode.current = 'normal'; for (const p of people) if (p.inside !== bus) p.wait = rnd(0, 2); },
   weather: ev => rollWeather(WICON[ev.msg] ? ev.msg : null),
   bus: () => summonBus(),

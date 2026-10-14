@@ -235,7 +235,7 @@ function menace() {
   for (const g of geese.birds) if (Math.random() < 0.05) g.say = pick(['🔪', '🎺', '😠']);
   for (const d of dogs) if (!d.lying && geese.birds.some(g => Math.hypot(g.x - d.x, g.y - d.y) < 8)) { d.say = '😨'; d.wait = 0; }
   for (const p of people) {
-    if (p.inside || p.intent === 'hide' || p.bike) continue;
+    if (p.inside || p.intent === 'hide' || p.bike || p.act === 'carve') continue;
     p.route = []; p.say = pick(['😱', '😨', '🏃']); p.group = null; p.joining = null;
     send(p, 'hide', doorOf(p.visitor ? pick(bType('cafe')) : p.home), 'fleeing the geese');
   }

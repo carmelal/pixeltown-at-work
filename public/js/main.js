@@ -1,4 +1,4 @@
-import { T, W, H, SKY, SEASON, southern, night, weather, WICON, nowDate, clock, seasonOverridden, notices, reno, buildings, trees, docks, lamps, pond, LANE, BUS_STOP, mode, cursor } from './world.js';
+import { T, W, H, SKY, SEASON, southern, night, weather, WICON, nowDate, clock, seasonOverridden, notices, reno, statues, buildings, trees, docks, lamps, pond, LANE, BUS_STOP, mode, cursor } from './world.js';
 import { cv, ctx, hi, hctx, fitOverlay, label } from './canvas.js';
 import { people, tickPerson, picnics, tickPicnics, tickNotices } from './people.js';
 import { dogs, tickDog, ducks, tickDucks, squirrels, tickSquirrel, geese, tickGeese, gooseAirborne } from './animals.js';
@@ -53,6 +53,7 @@ function render(now) {
     ...trees.map(([c, r]) => ({ y: r * T + 6, f: () => draw.drawTree(c, r, n) })),
     ...docks.map(d => ({ y: d.r * T + 2, f: () => draw.drawDock(d) })),
     ...picnics.map(b => ({ y: b.y - 3, f: () => draw.drawBlanket(b) })),
+    ...statues.map(s => ({ y: s.tile[1] * T + 1, f: () => draw.drawStatue(s) })),
     ...lamps.map(([c, r]) => ({ y: r * T + 1, f: () => draw.drawLamp(c, r, n) })),
   ];
   layer.sort((a, b) => a.y - b.y).forEach(d => d.f());
@@ -75,6 +76,7 @@ function hitTargets() {
   if (geese.state !== 'away') for (const g of geese.birds) t.push({ x: g.x, y: g.y, r: 5, text: `canada goose — ${geese.menace ? `${geese.check} failed; on the warpath` : geese.state === 'landed' ? `waiting on ${geese.check || 'the checks'}` : geese.state === 'leaving' ? 'leaving in a huff' : 'flying in'}` });
   for (const q of squirrels) if (!q.hidden) t.push({ x: q.x, y: q.y, r: 4, text: 'squirrel — making a run for it' });
   for (const d of ducks) if (!(d.air && d.air.phase === 'gone')) t.push({ x: d.x, y: d.y, r: 4, text: `duck — ${d.air ? 'flying' : d.scared > 0 ? 'fleeing a dog' : d.lure ? 'coming for bread' : 'paddling'}` });
+  for (const s of statues) t.push({ x: s.tile[0] * T + 4, y: s.tile[1] * T + 2, r: 6, text: s.done ? `statue of ${s.sculptor.name}'s PR` : `statue — ${Math.round(s.progress * 100)}% carved` });
   for (const d of docks) t.push({ x: d.c * T + 4, y: d.r * T + 4, r: 5, text: `bikeshare — ${d.bikes} bike${d.bikes === 1 ? '' : 's'} docked` });
   return t;
 }
