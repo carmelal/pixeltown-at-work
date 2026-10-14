@@ -1,5 +1,7 @@
 # pixeltown at work
 
+https://github.com/user-attachments/assets/2a815b29-9052-4694-b0cb-46de8e269cc6
+
 A tiny pixel town for a second monitor. People wander about and get on with their day; some of what they do is random, and some of it is a reaction to what you are doing on your machine.
 
 Made entirely using AI (Claude Fable 5) in an attempt to make me more productive.
