@@ -456,6 +456,13 @@ function onEvent(ev) {
     case 'party': mode = 'party'; modeUntil = performance.now() + 25000; clearGroups(); for (const p of people) { if (p.inside === bus) continue; if (p.inside) leave(p); p.route = []; p.wait = rnd(0, 2); } return say('♪ party' + msg);
     case 'nap': mode = 'nap'; modeUntil = performance.now() + 20000; clearGroups(); for (const p of people) { if (p.inside === bus) continue; p.route = []; p.wait = 0; } return say('z nap time' + msg);
     case 'wake': mode = 'normal'; for (const p of people) if (p.inside !== bus) p.wait = rnd(0, 2); return say('wake up' + msg);
+    case 'editing': { const b = pick(bType('office')); b.lit = true; let k = 0; for (const p of people) if (!p.inside && p.act === 'idle' && k < 3) { k++; p.wait = 0; p.route = []; goTo(p, doorOf(b), 'walk', 'going to work'); p.say = '💻'; } return say('✏️ editing ' + (ev.msg || '')); }
+    case 'idle': for (const p of people) if (p.inside && p.inside.type === 'office' && Math.random() < 0.5) p.wait = Math.min(p.wait, rnd(1, 4)); return say('☕️ taking a break' + msg, 4);
+    case 'checkout': for (const p of people) if (!p.inside && Math.random() < 0.4) { p.say = '🔀'; p.wait = Math.max(p.wait, 2); } return say('🔀 ' + (ev.msg || 'checkout'));
+    case 'pull': for (const p of people) if (!p.inside && Math.random() < 0.4) { p.say = '📥'; p.wait = Math.max(p.wait, 2); } return say('📥 pulled' + msg);
+    case 'merge': burst(20); for (const p of people) if (!p.inside && Math.random() < 0.5) { p.say = '🤝'; p.wait = Math.max(p.wait, 2); } return say('🤝 merged' + msg);
+    case 'rebase': for (const p of people) if (!p.inside && Math.random() < 0.3) { p.say = '🔄'; p.wait = Math.max(p.wait, 2); } return say('🔄 rebased' + msg);
+    case 'reset': for (const p of people) if (!p.inside && Math.random() < 0.3) { p.say = '😬'; p.wait = Math.max(p.wait, 2); } return say('⏪ reset' + msg);
     case 'weather': rollWeather(ev.msg && WICON[ev.msg] ? ev.msg : null); return say(`${WICON[weather.type]} ${weather.type}`);
     case 'bus': if (bus.state === 'away') bus.timer = 0; return;
     case 'geese': if (geese.state === 'away') { geese.timer = 0; spawnGeese(); geese.landing = true; geese.tile = pick(walkTiles.filter(([c, r]) => r === 14 && c >= 3 && c <= 12)) || geese.tile; } return;

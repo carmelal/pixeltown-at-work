@@ -5,8 +5,10 @@
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
+import { startWatching } from "./watch.js";
 
 const PORT = process.env.PORT || 1337;
+const ROOTS = (process.env.PIXELTOWN_ROOTS || "~/src/github.com/Shopify:~/src/github.com/carmelal").split(":");
 const PUB = path.join(import.meta.dirname, "public");
 const MIME = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".json": "application/json" };
 const clients = new Set();
@@ -42,4 +44,4 @@ http.createServer(async (req, res) => {
   if (!file.startsWith(PUB) || !fs.existsSync(file)) { res.writeHead(404); return res.end(); }
   res.writeHead(200, { "Content-Type": MIME[path.extname(file)] || "application/octet-stream", "Cache-Control": "no-store" });
   fs.createReadStream(file).pipe(res);
-}).listen(PORT, () => console.log(`pixeltown → http://localhost:${PORT}`));
+}).listen(PORT, () => { console.log(`pixeltown → http://localhost:${PORT}`); startWatching(ROOTS, broadcast); });
