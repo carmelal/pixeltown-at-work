@@ -1,7 +1,7 @@
 // events from the server (and the dev bar) and how the town reacts to them
 import { rnd, pick } from './util.js';
-import { mode, weather, rollWeather, WICON, bType, doorOf, walkTiles } from './world.js';
-import { people, clearGroups, leave, send, sendToWork } from './people.js';
+import { mode, weather, rollWeather, WICON, bType, doorOf, walkTiles, clock, SEASON, SEASONS, setSeason } from './world.js';
+import { people, clearGroups, leaveGroup, leave, send, sendToWork } from './people.js';
 import { geese, spawnGeese } from './animals.js';
 import { bus, summonBus, burst, deliverMail } from './town.js';
 import { coffeeRun } from './people.js';
@@ -23,8 +23,9 @@ const HANDLERS = {
   rebase: (ev, msg) => { react(['🔄'], 0.3); say('🔄 rebased' + msg); },
   reset: (ev, msg) => { react(['😬'], 0.3); say('⏪ reset' + msg); },
   editing: ev => {                                               // light an office and send a few idle people to it
-    const b = pick(bType('office')); b.lit = true; let k = 0;
-    for (const p of outside()) if (p.act === 'idle' && k < 3) { k++; p.wait = 0; p.route = []; sendToWork(p, b); p.say = '💻'; }
+    // about half of everyone outside heads for an office (spread across all of them), unless mid-ride or already at work
+    const offices = bType('office'); let k = 0;
+    for (const p of outside()) if (!p.bike && p.intent !== 'work' && Math.random() < 0.55 && k < 9) { k++; p.wait = 0; p.route = []; if (p.group) leaveGroup(p); const b = pick(offices); b.lit = true; sendToWork(p, b, 'heading in to work'); p.say = '💻'; }
     coffeeRun.until = performance.now() + 40000;                // while you are editing, office workers trickle out for coffee and back
   },
   idle: () => { coffeeRun.until = 0; for (const p of people) if (p.inside && p.inside.type === 'office' && Math.random() < 0.7) { p.wait = Math.min(p.wait, rnd(1, 5)); p.urge = 'break'; } },
@@ -33,6 +34,8 @@ const HANDLERS = {
   wake: (ev, msg) => { mode.current = 'normal'; for (const p of people) if (p.inside !== bus) p.wait = rnd(0, 2); say('wake up' + msg); },
   weather: ev => { rollWeather(ev.msg && WICON[ev.msg] ? ev.msg : null); say(`${WICON[weather.type]} ${weather.type}`); },
   bus: () => summonBus(),
+  season: ev => setSeason(ev.msg === 'reset' ? 'reset' : SEASONS.includes(ev.msg) ? ev.msg : SEASONS[(SEASONS.indexOf(SEASON) + 1) % 4]),   // cycle seasons (msg: name, or 'reset')
+  time: ev => { clock.offsetHours = ev.msg === 'reset' ? 0 : (clock.offsetHours + (Number(ev.msg) || 3)) % 24; },   // advance the town clock (msg: hours, or 'reset')
   geese: () => { if (geese.state === 'away') spawnGeese(true); },
 };
 

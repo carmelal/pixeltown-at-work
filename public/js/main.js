@@ -1,5 +1,5 @@
 // wiring: the frame loop, draw order, hover tooltips, dev bar
-import { T, W, H, SKY, SEASON, southern, night, weather, WICON, buildings, trees, docks, lamps, pond, LANE, BUS_STOP, mode, cursor } from './world.js';
+import { T, W, H, SKY, SEASON, southern, night, weather, WICON, nowDate, clock, seasonOverridden, buildings, trees, docks, lamps, pond, LANE, BUS_STOP, mode, cursor } from './world.js';
 import { cv, ctx, hi, hctx, fitOverlay, label } from './canvas.js';
 import { people, tickPerson } from './people.js';
 import { dogs, tickDog, ducks, tickDucks, squirrels, tickSquirrel, geese, tickGeese, geeseOnGround } from './animals.js';
@@ -10,7 +10,7 @@ import * as draw from './sprites.js';
 const params = new URLSearchParams(location.search);
 const tip = document.getElementById('tip'), bar = document.getElementById('bar');
 if (params.get('dev') !== 'true') bar.classList.add('hidden');
-bar.querySelectorAll('[data-ev]').forEach(el => el.onclick = () => fetch('/event?type=' + el.dataset.ev));
+bar.querySelectorAll('[data-ev]').forEach(el => el.onclick = () => fetch('/event?type=' + el.dataset.ev + (el.dataset.msg ? '&msg=' + el.dataset.msg : '')));
 connect(document.getElementById('conn'));
 
 // ---------- frame ----------
@@ -52,8 +52,8 @@ function render(now) {
   for (const b of birds) draw.drawBird(b, now);
   for (const f of particles) draw.drawParticle(f);
   draw.drawTints(n);
-  const d = new Date();
-  label(`${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')} ${WICON[weather.type]}`, 2, 5, 'rgba(255,255,255,0.85)', 5.5, 'left', true);
+  const d = nowDate();
+  label(`${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')} ${WICON[weather.type]}${clock.offsetHours ? ' ⏩' : ''}${seasonOverridden() ? ' ' + SEASON : ''}`, 2, 5, 'rgba(255,255,255,0.85)', 5.5, 'left', true);
 }
 
 // ---------- hover: one list of hit targets, nearest wins, then area fallbacks ----------

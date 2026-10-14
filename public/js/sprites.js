@@ -1,6 +1,6 @@
 // how everything looks. Each draw function takes the entity (and night level n / time now where needed) and paints with px().
 import { clamp, hash, lerp } from './util.js';
-import { T, W, H, SKY, SEASON, PAL, weather, hourNow, HEIGHTS, isOpen, pond, fountain, benches, flowers, LANE, BUS_STOP, BUS_WAIT, mode } from './world.js';
+import { T, W, H, SKY, SEASON, PAL, weather, wet, hourNow, nowDate, HEIGHTS, isOpen, pond, fountain, benches, flowers, LANE, BUS_STOP, BUS_WAIT, mode } from './world.js';
 import { ctx, px, shade, rgbn, grey, label, bubble, blit } from './canvas.js';
 import { geese } from './animals.js';
 
@@ -16,7 +16,7 @@ const GRID_WINDOWS = new Set(['office', 'apartment']), NO_WINDOWS = new Set(['gy
 const FACADE = {
   hall(x, y, w, h, n, now, roof) {                                              // clock tower with a real clock
     px(x + w / 2 - 3, y - 7, roof, 6, 7); px(x + w / 2 - 2, y - 6, '#f4f4ee', 4, 4);
-    const hr = (hourNow() % 12) / 12 * Math.PI * 2, mn = (new Date().getMinutes() / 60) * Math.PI * 2, cx = x + w / 2, cy = y - 4;
+    const hr = (hourNow() % 12) / 12 * Math.PI * 2, mn = (nowDate().getMinutes() / 60) * Math.PI * 2, cx = x + w / 2, cy = y - 4;
     px(cx - 0.5 + Math.sin(hr), cy - 0.5 - Math.cos(hr), '#222'); px(cx - 0.5 + Math.sin(mn) * 1.6, cy - 0.5 - Math.cos(mn) * 1.6, '#222');
   },
   cafe(x, y, w) { px(x + 1, y + 6, '#c33', w - 2, 2); for (let i = 1; i < w - 2; i += 2) px(x + i, y + 8, '#eee', 1, 1); },
@@ -44,7 +44,7 @@ export function drawBuilding(b, n, now) {
   px(x, y, roof, w, 4);
   if (b.chimney) px(x + w - 4, y - 2, `hsl(${b.hue} 20% ${shade(35, n)}%)`, 2, 3);
   FACADE[b.type]?.(x, y, w, h, n, now, roof, b);
-  const win = b.lit && (n > 0.3 || weather.type === 'rain' || weather.type === 'snow') ? '#ffe28a' : n > 0.3 ? '#1a1c28' : '#a8dcff';
+  const win = b.lit ? '#fff0a0' : n > 0.3 ? '#1a1c28' : '#a8dcff';
   if (GRID_WINDOWS.has(b.type)) { for (let i = 2; i < w - 1; i += 3) for (let j = 6; j < h - 4; j += 4) px(x + i, y + j, win, 2, 2); }
   else if (!NO_WINDOWS.has(b.type)) for (let i = 2; i < w - 2; i += 4) px(x + i, y + Math.max(7, h - 11), win, 2, 2);
   px(x + w / 2 - 1, y + h - 5, '#2a1a0e', 3, 5);                                     // door
@@ -149,8 +149,12 @@ export function drawDock(d) {                                                   
   for (let i = 0; i < d.bikes; i++) { px(x + 1 + i * 2, y + 5, '#222', 1, 1); px(x + 1 + i * 2, y + 4, '#c33', 1, 1); }
 }
 export function drawLamp(c, r, n) {
-  px(c * T + 3, r * T - 7, '#345', 1, 8); px(c * T + 2, r * T - 8, n > 0.3 ? '#ffe28a' : '#9ab', 3, 2);
-  if (n > 0.3) { ctx.fillStyle = `rgba(255,220,120,${0.12 * n})`; ctx.fillRect(c * T - 3, r * T - 6, 13, 12); }
+  const on = n > 0.3 || wet(), glow = Math.max(n, wet() ? 0.6 : 0);
+  px(c * T + 3, r * T - 7, '#345', 1, 8); px(c * T + 2, r * T - 8, on ? '#fff3b0' : '#9ab', 3, 2);
+  if (on) {                                                                      // two-step halo: a bright core and a wider soft pool on the ground
+    ctx.fillStyle = `rgba(255,225,130,${0.32 * glow})`; ctx.fillRect(c * T - 2, r * T - 9, 11, 10);
+    ctx.fillStyle = `rgba(255,215,120,${0.16 * glow})`; ctx.fillRect(c * T - 6, r * T - 7, 19, 16);
+  }
 }
 export function drawShelter(n) {                                                 // glass bus shelter straddling the three waiting tiles
   const x = BUS_WAIT[0][0] * T, y = BUS_STOP[1] * T;

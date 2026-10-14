@@ -6,19 +6,27 @@ export const SKY = 2;                                                   // alley
 export const tileX = c => c * T + 4, tileY = r => r * T + 4;            // centre of a tile in world pixels
 
 // ---------- time, season, weather ----------
-export const hourNow = () => { const d = new Date(); return d.getHours() + d.getMinutes() / 60; };
+export const clock = { offsetHours: 0 };                                // dev override; 0 = real time
+export const nowDate = () => new Date(Date.now() + clock.offsetHours * 3600000);
+export const hourNow = () => { const d = nowDate(); return d.getHours() + d.getMinutes() / 60; };
 const TZ = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
 export const southern = /^(Australia|Pacific\/(Auckland|Fiji|Tongatapu|Chatham|Port_Moresby)|America\/(Sao_Paulo|Argentina|Buenos_Aires|Santiago|Montevideo|Lima|La_Paz|Asuncion)|Africa\/(Johannesburg|Maputo|Harare|Windhoek|Lusaka|Gaborone)|Antarctica|Indian\/(Mauritius|Reunion))/.test(TZ);
 function seasonFor(d) { let m = d.getMonth(); if (southern) m = (m + 6) % 12; return m === 11 || m < 2 ? 'winter' : m < 5 ? 'spring' : m < 8 ? 'summer' : 'autumn'; }
-export const SEASON = seasonFor(new Date());
-const SUN = { winter: [7.5, 17], spring: [6.5, 19.5], summer: [5.5, 21], autumn: [7, 18.5] }[SEASON];   // sunrise, sunset
+const REAL_SEASON = seasonFor(new Date());
+export let SEASON = REAL_SEASON;                                        // live binding; setSeason() swaps it (dev override)
+const SUNS = { winter: [7.5, 17], spring: [6.5, 19.5], summer: [5.5, 21], autumn: [7, 18.5] };   // sunrise, sunset
+let SUN = SUNS[SEASON];
 export function night() { const h = hourNow(), [rise, set] = SUN; if (h < rise - 1 || h > set + 1) return 1; if (h < rise + 1) return (rise + 1 - h) / 2; if (h > set - 1) return (h - set + 1) / 2; return 0; }
-export const PAL = {   // grass, tree canopy, snow on ground
+const PALS = {   // grass, tree canopy, snow on ground
   spring: { grass: [92, 150, 60], tree: [70, 140, 60], snow: false },
   summer: { grass: [74, 128, 56], tree: [34, 104, 44], snow: false },
   autumn: { grass: [120, 118, 50], tree: [170, 90, 30], snow: false },
   winter: { grass: [200, 205, 215], tree: [60, 50, 40], snow: true },
-}[SEASON];
+};
+export let PAL = PALS[SEASON];
+export const SEASONS = ['spring', 'summer', 'autumn', 'winter'];
+export function setSeason(s) { SEASON = s === 'reset' ? REAL_SEASON : s; SUN = SUNS[SEASON]; PAL = PALS[SEASON]; if (SEASON !== 'winter' && weather.type === 'snow') weather.type = 'rain'; if (SEASON === 'winter' && weather.type === 'rain') weather.type = 'snow'; }
+export const seasonOverridden = () => SEASON !== REAL_SEASON;
 
 export const weather = { type: 'clear', until: 0 };      // clear | cloudy | rain | snow
 export function rollWeather(force) {

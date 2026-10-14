@@ -2,7 +2,7 @@
 import { rnd, ri, pick, clamp, moveToward } from './util.js';
 import { T, W, H, tileX, tileY, SEASON, hourNow, night, wet, pond, trees, walkTiles, pondSide, spotsAround, nearestTile, path, routeTo, followRoute, cursor } from './world.js';
 import { people, groups, send, idle } from './people.js';
-import { particles, splash } from './town.js';
+import { particles, splash, carrier } from './town.js';
 
 // ---------- dogs ----------
 // temperament drives behaviour: lazy dogs lie around, loyal ones stick to people, wild ones chase, social ones hang around chats
@@ -84,8 +84,8 @@ export function tickDog(d, dt) {
     return;
   }
   // following a person
-  if (d.follow && (d.follow.inside || Math.random() > d.loyalty)) d.follow = null;
-  if (!d.follow && Math.random() < 0.35) d.follow = pick(people.filter(p => !p.inside));
+  if (d.follow && (d.follow.inside || (d.follow === carrier && !carrier.active) || Math.random() > d.loyalty)) d.follow = null;
+  if (!d.follow && Math.random() < 0.35) d.follow = pick([...people.filter(p => !p.inside), ...(carrier.active ? [carrier, carrier, carrier] : [])]);   // the carrier is popular
   if (d.follow) {
     const f = d.follow, sp = spotsAround(f.c, f.r);
     d.desc = `following ${f.name}`;
