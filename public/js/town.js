@@ -1,6 +1,6 @@
 // the bus, ambient life (birds, weather particles, leaves, smoke) and confetti
 import { rnd, ri, pick, hash } from './util.js';
-import { T, W, H, SKY, SEASON, night, wet, weather, rollWeather, buildings, trees, fountain, LANE, BUS_STOP, tileX, tileY } from './world.js';
+import { T, W, H, SKY, SEASON, night, wet, weather, rollWeather, buildings, trees, fountain, LANE, BUS_STOP, tileX, tileY, doorOf, path, followRoute } from './world.js';
 import { people, leaveGroup } from './people.js';
 
 // ---------- bus: climbs out of the bottom edge at the lane's curve, turns right, stops under the shelter, leaves to the right ----------
@@ -19,6 +19,34 @@ function stopBus() {
   for (const p of people) if (p.desc === 'waiting for the bus' && !p.inside) { bus.riders.push(p); p.inside = bus; p.desc = 'riding the bus'; p.act = 'inside'; p.wait = 1e9; p.say = ''; if (p.group) leaveGroup(p); }
 }
 export function summonBus() { if (bus.state === 'away') bus.timer = 0; }
+
+// ---------- mail: on a push, a van parks on the lane and the carrier walks the whole town, then drives off with the outgoing mail ----------
+const VAN_X = 11 * T + 4, CARRIER_HOME = [19, 14];
+export const van = { state: 'away', x: LANE.c * T, y: H + 30, laneY: LANE.r * T + 8, w: 16, h: 9 };
+export const carrier = { name: 'mail carrier', active: false, c: 0, r: 0, x: 0, y: 0, route: [], stops: [], wait: 0, frame: 0, flip: false, say: '', act: 'walk', desc: '', shirt: '#1e3f8a', hair: '#2b1b0e', hat: true, hatColor: '#1e3f8a' };   // postal blue
+export function deliverMail() { if (van.state === 'away') { van.state = 'rising'; van.x = LANE.c * T; van.y = H + 30; } }
+function nextStop() {
+  if (!carrier.stops.length) { carrier.desc = 'heading back to the van'; carrier.route = path([carrier.c, carrier.r], CARRIER_HOME) || []; carrier.leaving = true; return; }
+  // greedy nearest-next tour
+  carrier.stops.sort((a, b) => Math.hypot(...tileDelta(a)) - Math.hypot(...tileDelta(b)));
+  const b = carrier.stops.shift(), d = doorOf(b); carrier.target = b; carrier.desc = `delivering to the ${b.type}`;
+  carrier.route = path([carrier.c, carrier.r], d) || []; if (!carrier.route.length) { carrier.wait = 0.3; carrier.say = '✉️'; }
+}
+const tileDelta = b => { const d = doorOf(b); return [d[0] - carrier.c, d[1] - carrier.r]; };
+export function tickMail(dt) {
+  if (van.state === 'rising') { van.y -= 40 * dt; if (van.y <= van.laneY) { van.y = van.laneY; van.state = 'arriving'; van.x = LANE.c * T - 10; } }
+  else if (van.state === 'arriving') { van.x += 50 * dt; if (van.x >= VAN_X + 9 * T) { van.x = VAN_X + 9 * T; van.state = 'parked'; startCarrier(); } }
+  else if (van.state === 'leaving') { van.x += 50 * dt; if (van.x > W + 20) van.state = 'away'; }
+  if (!carrier.active) return;
+  carrier.frame += dt;
+  if (carrier.route.length) return followRoute(carrier, 28, dt, () => { if (carrier.leaving) { carrier.active = false; carrier.leaving = false; van.state = 'leaving'; return; } carrier.wait = 0.35; carrier.say = '✉️'; });
+  if ((carrier.wait -= dt) > 0) return;
+  carrier.say = ''; nextStop();
+}
+function startCarrier() {
+  [carrier.c, carrier.r] = CARRIER_HOME; carrier.x = tileX(carrier.c); carrier.y = tileY(carrier.r);
+  carrier.active = true; carrier.leaving = false; carrier.stops = buildings.slice(); carrier.say = '📬'; carrier.wait = 0.6; carrier.desc = 'sorting the mail';
+}
 
 // ---------- particles and birds ----------
 export const particles = [];                                  // { k: rain|snow|leaf|petal|smoke|splash|confetti, x, y, vx, vy, t, c? }

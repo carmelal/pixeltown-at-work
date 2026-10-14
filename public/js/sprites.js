@@ -73,7 +73,7 @@ export function drawPerson(p, now) {
   }
   else if (p.act === 'sit') blit(PERSON.sit, x, yy, pal);
   else blit(step ? PERSON.step : PERSON.stand, x, yy - 1, pal);
-  if (p.hat || (SEASON === 'winter' && hash(p.name) % 2)) px(x - 1, yy - 2, SEASON === 'winter' ? p.shirt : '#333', 5, 1);
+  if (p.hat || (SEASON === 'winter' && hash(p.name) % 2)) px(x - 1, yy - 2, p.hatColor || (SEASON === 'winter' ? p.shirt : '#333'), 5, 1);
   bubble(p.say, x + 1.5, yy - 4, 5);
 }
 
@@ -172,6 +172,14 @@ export function drawBus(bus, n) {
   px(x + 1, y + bus.h - 2, '#444', 4, 2); px(x + bus.w - 6, y + bus.h - 2, '#444', 4, 2); px(x + 2, y + bus.h - 2, '#999', 2, 1); px(x + bus.w - 5, y + bus.h - 2, '#999', 2, 1);   // wheels
   px(x + 10, y + 2, bus.state === 'stopped' ? '#2a1a0e' : '#c8901a', 3, 6);     // door (open when stopped)
   if (n > 0.5) px(x + bus.w - 1, y + 5, '#ffe', 1, 1);
+}
+
+export function drawVan(v, n) {
+  if (v.state === 'away') return;
+  if (v.state === 'rising') { const x = Math.round(v.x) + 3, y = Math.round(v.y) - 12; px(x, y, '#f4f4f4', 10, 12); px(x, y + 4, '#d33', 10, 2); px(x + 1, y + 1, '#9fd8ff', 8, 3); px(x + 1, y + 10, '#d33', 2, 1); px(x + 7, y + 10, '#d33', 2, 1); px(x, y + 12, '#222', 3, 1); px(x + 7, y + 12, '#222', 3, 1); return; }
+  const x = Math.round(v.x), y = Math.round(v.y) - v.h;                        // side view: white box van with a red stripe and a cab at the front
+  px(x, y + 1, '#f4f4f4', v.w - 4, v.h - 3); px(x + v.w - 4, y + 3, '#f4f4f4', 4, v.h - 5); px(x, y + 4, '#d33', v.w - 4, 2); px(x + v.w - 3, y + 3, n > 0.5 ? '#ffe28a' : '#9fd8ff', 2, 3);
+  px(x + 2, y + 2, '#1e3f8a', 3, 1); px(x + 1, y + v.h - 2, '#444', 3, 2); px(x + v.w - 5, y + v.h - 2, '#444', 3, 2); if (n > 0.5) px(x + v.w - 1, y + 6, '#ffe', 1, 1);
 }
 
 // ---------- ground and sky ----------

@@ -3,7 +3,7 @@ import { T, W, H, SKY, SEASON, southern, night, weather, WICON, buildings, trees
 import { cv, ctx, hi, hctx, fitOverlay, label } from './canvas.js';
 import { people, tickPerson } from './people.js';
 import { dogs, tickDog, ducks, tickDucks, squirrels, tickSquirrel, geese, tickGeese, geeseOnGround } from './animals.js';
-import { bus, tickBus, tickAmbient, particles, birds } from './town.js';
+import { bus, tickBus, tickAmbient, particles, birds, van, carrier, tickMail } from './town.js';
 import { onEvent, connect } from './events.js';
 import * as draw from './sprites.js';
 
@@ -21,7 +21,7 @@ function frame(now) {
   for (const p of people) tickPerson(p, dt);
   for (const d of dogs) tickDog(d, dt);
   for (const q of squirrels) tickSquirrel(q, dt);
-  tickGeese(dt); tickDucks(dt); tickBus(dt); tickAmbient(dt);
+  tickGeese(dt); tickDucks(dt); tickBus(dt); tickMail(dt); tickAmbient(dt);
   render(now);
   requestAnimationFrame(frame);
 }
@@ -42,6 +42,8 @@ function render(now) {
     ...(geese.state === 'away' ? [] : geese.birds.map(g => ({ y: geese.state === 'landed' || (geese.state === 'landing' && Math.abs(g.gy - g.y) < 3) ? g.y + 1 : FRONT, f: () => draw.drawGoose(g, now) }))),
     ...ducks.filter(d => !(d.air && d.air.phase === 'gone')).map(d => ({ y: d.air ? FRONT : d.y, f: () => draw.drawDuck(d, now) })),
     { y: bus.state === 'rising' ? H + 1 : bus.y + 1, f: () => draw.drawBus(bus, n) },
+    { y: van.state === 'rising' ? H + 2 : van.y + 1, f: () => draw.drawVan(van, n) },
+    ...(carrier.active ? [{ y: carrier.y, f: () => draw.drawPerson(carrier, now) }] : []),
     ...trees.map(([c, r]) => ({ y: r * T + 6, f: () => draw.drawTree(c, r, n) })),
     ...docks.map(d => ({ y: d.r * T + 2, f: () => draw.drawDock(d) })),
     ...lamps.map(([c, r]) => ({ y: r * T + 1, f: () => draw.drawLamp(c, r, n) })),
@@ -59,6 +61,7 @@ function hitTargets() {
   const t = [];
   for (const p of people) if (!p.inside) t.push({ x: p.x, y: p.y + 2, r: 5, text: `${p.name} — ${p.desc}` });
   for (const d of dogs) t.push({ x: d.x, y: d.y, r: 5, text: `${d.name} (${d.temperament}) — ${d.desc}` });
+  if (carrier.active) t.push({ x: carrier.x, y: carrier.y + 2, r: 5, text: `mail carrier — ${carrier.desc}` });
   if (geese.state !== 'away') for (const g of geese.birds) t.push({ x: g.x, y: g.y, r: 5, text: `canada goose — ${geese.state === 'landed' ? 'occupying the park' : geese.state === 'leaving' ? 'leaving in a huff' : 'flying over'}` });
   for (const q of squirrels) if (!q.hidden) t.push({ x: q.x, y: q.y, r: 4, text: 'squirrel — making a run for it' });
   for (const d of ducks) if (!(d.air && d.air.phase === 'gone')) t.push({ x: d.x, y: d.y, r: 4, text: `duck — ${d.air ? 'flying' : d.scared > 0 ? 'fleeing a dog' : d.lure ? 'coming for bread' : 'paddling'}` });
@@ -67,6 +70,7 @@ function hitTargets() {
 }
 function areaText(mx, my) {
   if (bus.state !== 'away' && mx >= bus.x && mx < bus.x + bus.w && my >= bus.y - 14 && my < bus.y + 1) return `bus — ${bus.riders.length ? 'carrying ' + bus.riders.map(p => p.name).join(', ') : 'empty'}`;
+  if (van.state !== 'away' && mx >= van.x && mx < van.x + van.w && my >= van.y - 12 && my < van.y + 1) return `mail van — ${van.state === 'parked' ? 'waiting for the carrier' : van.state === 'leaving' ? 'off with the outgoing mail' : 'arriving'}`;
   if (my >= LANE.r * T && mx >= LANE.c * T) return 'bus lane';
   if (my >= pond.r * T && mx < pond.w * T) return 'pond';
   const b = buildings.find(b => mx >= b.c * T && mx < (b.c + b.w) * T && my >= b.r * T && my < (b.r + b.h) * T);

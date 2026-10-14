@@ -3,7 +3,8 @@ import { rnd, pick } from './util.js';
 import { mode, weather, rollWeather, WICON, bType, doorOf, walkTiles } from './world.js';
 import { people, clearGroups, leave, send, sendToWork } from './people.js';
 import { geese, spawnGeese } from './animals.js';
-import { bus, summonBus, burst } from './town.js';
+import { bus, summonBus, burst, deliverMail } from './town.js';
+import { coffeeRun } from './people.js';
 
 export function say() {}                                        // banners are gone; the dev status line is the only readout
 
@@ -15,7 +16,7 @@ function setMode(m, secs) { mode.current = m; mode.until = performance.now() + s
 const HANDLERS = {
   hello: () => {},
   commit: (ev, msg) => { react(['✅️', '👏', '🎉']); burst(12); say('✅️ commit' + msg); },
-  push: (ev, msg) => { react(['🚀', '🎊', '🙌'], 1, 3); burst(60); say('🚀 pushed' + msg); },
+  push: () => { deliverMail(); react(['👋'], 0.3); },
   merge: (ev, msg) => { react(['🤝'], 0.5); burst(20); say('🤝 merged' + msg); },
   checkout: ev => { react(['🔀'], 0.4); say('🔀 ' + (ev.msg || 'checkout')); },
   pull: (ev, msg) => { react(['📥'], 0.4); say('📥 pulled' + msg); },
@@ -24,8 +25,9 @@ const HANDLERS = {
   editing: ev => {                                               // light an office and send a few idle people to it
     const b = pick(bType('office')); b.lit = true; let k = 0;
     for (const p of outside()) if (p.act === 'idle' && k < 3) { k++; p.wait = 0; p.route = []; sendToWork(p, b); p.say = '💻'; }
+    coffeeRun.until = performance.now() + 40000;                // while you are editing, office workers trickle out for coffee and back
   },
-  idle: () => { for (const p of people) if (p.inside && p.inside.type === 'office' && Math.random() < 0.5) p.wait = Math.min(p.wait, rnd(1, 4)); },
+  idle: () => { coffeeRun.until = 0; for (const p of people) if (p.inside && p.inside.type === 'office' && Math.random() < 0.7) { p.wait = Math.min(p.wait, rnd(1, 5)); p.urge = 'break'; } },
   gathering: (ev, msg) => { setMode('gathering', 25); for (const p of people) { if (p.inside === bus) continue; if (p.inside) leave(p); p.route = []; p.wait = rnd(0, 2); } say('🏛️ town gathering' + msg); },
   nap: (ev, msg) => { setMode('nap', 20); for (const p of people) { if (p.inside === bus) continue; p.route = []; p.wait = 0; } say('💤 nap time' + msg); },
   wake: (ev, msg) => { mode.current = 'normal'; for (const p of people) if (p.inside !== bus) p.wait = rnd(0, 2); say('wake up' + msg); },

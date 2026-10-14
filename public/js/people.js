@@ -8,6 +8,7 @@ import { bus } from './town.js';
 export const TOPICS = ['☕️', '🍕', '🐶', '🌧️', '💻', '🎮', '📺', '🚲', '🏠', '😂', '🤔', '💸', '🎂', '✈️', '📚', '🧦'];
 const NAMES = ['ada', 'bo', 'cy', 'dot', 'eli', 'fay', 'gus', 'hal', 'ivy', 'jo', 'kit', 'lou', 'mo', 'nan', 'oz', 'pip'];
 export const people = [];
+export const coffeeRun = { until: 0 };                       // set by the editing signal
 
 function addPerson(name) {
   const homes = buildings.filter(b => b.type === 'house' || b.type === 'apartment'), h = hash(name), home = homes[h % homes.length], [c, r] = doorOf(home);
@@ -35,7 +36,7 @@ const look = (p, tile, what) => send(p, 'look', tile, `going to look at ${what}`
 // `go` returns false if the intent cannot start right now (no path, nothing to do), and choose() then falls back to standing around
 export const INTENTS = {
   walk:     { w: 18, go: p => send(p, 'walk', pick(walkTiles), 'out for a walk'),                          arrive: p => idle(p, 'standing around') },
-  cafe:     { w: 12, go: p => toDoor(p, 'cafe', 'cafe', 'going for coffee'),                                arrive: (p, here) => enter(p, here, [3, 8], 'inside the cafe') },
+  cafe:     { w: 12, go: p => toDoor(p, 'cafe', 'cafe', 'going for coffee'),                                arrive: (p, here) => enter(p, here, p.backTo ? [2, 4] : [3, 8], 'inside the cafe') },
   work:     { w: 12, go: p => sendToWork(p),                                                                 arrive: (p, here) => enter(p, here, [15, 40], 'at work') },
   shop:     { w: 8,  go: p => toDoor(p, 'shop', 'shop', 'running an errand'),                               arrive: (p, here) => enter(p, here, [3, 8], 'shopping') },
   bench:    { w: 10, go: p => send(p, 'bench', pick(benches), 'going to sit down'),                         arrive: p => { p.act = 'sit'; p.desc = 'sitting on a bench'; p.wait = rnd(8, 20); } },
@@ -86,6 +87,7 @@ const URGES = [
 ];
 
 export function choose(p) {
+  if (p.urge === 'break') { p.urge = null; const ok = Math.random() < 0.65 ? INTENTS.chat.go(p) : INTENTS.ducks.go(p); if (ok !== false) { p.desc = p.desc.replace('going', 'on a break, going'); return; } }
   if (mode.current === 'gathering') { const t = [Math.floor(rnd(PLAZA.c0 + 1, PLAZA.c1)), Math.floor(rnd(PLAZA.r0 + 1, PLAZA.r1 + 1))]; if (walkable(...t)) send(p, 'gather', t, 'heading to the gathering'); p.wait = rnd(1, 3); return; }
   if (mode.current === 'nap') return idle(p, 'napping', [5, 5], '💤');
   for (const [prob, when, act] of URGES) if (when() && Math.random() < prob) { if (act(p) !== false) return; }
@@ -138,6 +140,8 @@ export function clearGroups() { for (const p of people) { p.group = null; p.join
 export function leave(p) {
   const b = p.inside; p.inside = null; if (b.lit !== undefined && !people.some(o => o.inside === b)) b.lit = false;
   const out = VISITS[b.type] ? pick(VISITS[b.type].out) : { cafe: '☕️', shop: '🛍️', hall: '📜' }[b.type] ?? (b.type === 'office' ? pick(['💻', '😮‍💨', '📎']) : '');
+  if (p.backTo) { const o = p.backTo; p.backTo = null; if (sendToWork(p, o, 'back to work with coffee')) { p.say = '☕️'; return; } }
+  if (b.type === 'office' && performance.now() < coffeeRun.until && Math.random() < 0.6 && !p.urge) { if (send(p, 'cafe', doorOf(pick(bType('cafe'))), 'coffee run')) { p.backTo = b; return; } }
   idle(p, 'just stepped outside', [1, 3], out);
 }
 
