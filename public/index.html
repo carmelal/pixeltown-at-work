@@ -61,23 +61,28 @@ const WICON = { clear: '☀️', cloudy: '☁️', rain: '🌧️', snow: '❄�
 // type, col, row, width (tiles); all buildings are 3 tiles tall
 const B = (type, c, r, w, hue = ri(0, 359)) => ({ type, c, r, w, h: 3, hue, lit: false, chimney: type === 'house' && Math.random() < 0.7 });
 const buildings = [
-  B('office', 0, 3, 3), B('house', 3, 3, 2), B('house', 5, 3, 2), B('cafe', 8, 3, 3), B('house', 11, 3, 2), B('shop', 13, 3, 3),
-  B('house', 17, 3, 2), B('office', 19, 3, 4), B('house', 24, 3, 2), B('hall', 26, 3, 4),
-  B('house', 0, 7, 2), B('house', 3, 7, 2), B('shop', 6, 7, 3), B('cafe', 21, 7, 3), B('house', 25, 7, 2), B('house', 28, 7, 2),
-  B('shop', 0, 11, 3), B('house', 4, 11, 2), B('house', 6, 11, 2), B('office', 9, 11, 3), B('house', 13, 11, 2), B('house', 15, 11, 2),
-  B('shop', 18, 11, 3), B('house', 22, 11, 2), B('house', 24, 11, 2), B('office', 27, 11, 3),
+  // top row: one gap at col 15 connects the footpath to the back alley
+  B('office', 0, 3, 3), B('house', 3, 3, 2), B('house', 5, 3, 2), B('cafe', 7, 3, 3), B('house', 10, 3, 2), B('shop', 12, 3, 3),
+  B('house', 16, 3, 2), B('office', 18, 3, 4), B('house', 22, 3, 2), B('hall', 24, 3, 4), B('house', 28, 3, 2),
+  // middle row: solid on both sides of the plaza
+  B('house', 0, 7, 2), B('house', 2, 7, 2), B('shop', 4, 7, 3), B('house', 7, 7, 2), B('cafe', 21, 7, 3), B('house', 24, 7, 2), B('house', 26, 7, 2), B('house', 28, 7, 2),
+  // bottom row: gaps at cols 7 and 18 lead down to the park
+  B('shop', 0, 11, 3), B('house', 3, 11, 2), B('house', 5, 11, 2), B('office', 8, 11, 3), B('house', 11, 11, 2), B('house', 13, 11, 2), B('shop', 15, 11, 3),
+  B('house', 19, 11, 2), B('house', 21, 11, 2), B('office', 23, 11, 3), B('house', 26, 11, 2), B('house', 28, 11, 2),
 ];
 const fountain = { c: 14, r: 7 };                         // 2x2
-const pond = { c: 2, r: 14, w: 3, h: 2 };
-const benches = [[11, 8], [18, 8], [9, 15], [20, 15], [26, 14]];
-const trees = [[7, 14], [12, 15], [16, 14], [23, 15], [28, 15], [0, 15], [16, 8], [12, 7]];
+const pond = { c: 0, r: 15, w: 14, h: 2 };                       // bottom-left, bleeds off the left and bottom edges
+const benches = [[11, 8], [18, 8], [2, 14], [10, 14], [15, 15], [26, 14]];
+const trees = [[14, 15], [16, 15], [16, 8], [12, 7]];   // bank trees beside the pond, plaza trees
 const lamps = [[1, 6], [8, 6], [15, 6], [22, 6], [29, 6], [4, 10], [11, 10], [18, 10], [25, 10]];   // drawn at the top edge of road tiles
 const flowers = [[9, 9], [10, 9], [19, 9], [20, 9], [9, 7], [20, 7]];
-const BUS_STOP = [20, 6];
+const SKY = 2;                                                   // alley row 2 runs behind the top row of buildings
+const LANE = { c: 18, r: 15 };                                   // bus lane: rows 15-16 from col 18 to the right edge, entering from the bottom
+const BUS_STOP = [22, 14], BUS_WAIT = [[21, 14], [22, 14], [23, 14]];
 const blocked = new Set();
 const key = (c, r) => c + ',' + r;
 for (const b of buildings) for (let c = b.c; c < b.c + b.w; c++) for (let r = b.r; r < b.r + b.h; r++) blocked.add(key(c, r));
-for (let c = 0; c < COLS; c++) for (let r = 0; r < 3; r++) blocked.add(key(c, r));   // sky
+for (let c = 0; c < COLS; c++) { for (let r = 0; r < SKY; r++) blocked.add(key(c, r)); blocked.add(key(c, 16)); if (c >= LANE.c) blocked.add(key(c, LANE.r)); }   // sky, bottom row, bus lane
 for (let c = 0; c < 2; c++) for (let r = 0; r < 2; r++) blocked.add(key(fountain.c + c, fountain.r + r));
 for (let c = 0; c < pond.w; c++) for (let r = 0; r < pond.h; r++) blocked.add(key(pond.c + c, pond.r + r));
 for (const [c, r] of trees) blocked.add(key(c, r));
@@ -85,7 +90,7 @@ const walkable = (c, r) => c >= 0 && r >= 0 && c < COLS && r < ROWS && !blocked.
 const doorOf = b => [b.c + Math.floor(b.w / 2), b.r + b.h];       // tile just below the door
 const walkTiles = []; for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) if (walkable(c, r)) walkTiles.push([c, r]);
 const bType = t => buildings.filter(b => b.type === t);
-const pondSide = [[1, 14], [1, 15], [5, 14], [5, 15], [2, 13], [3, 13], [4, 13]].filter(t => walkable(...t));
+const pondSide = walkTiles.filter(([c, r]) => r === 14 && c < pond.w);
 
 function path(from, to) {                                    // BFS on tiles
   const start = key(...from), goal = key(...to); if (start === goal) return [];
@@ -146,10 +151,10 @@ function choose(p) {
   if (roll < 0.60) return goTo(p, pick(benches), 'walk', 'going to sit down');
   if (roll < 0.64) return goTo(p, pick([[13, 9], [16, 9], [13, 6], [16, 6]]), 'walk', 'going to look at the fountain');
   if (roll < 0.67) { const [c, r] = pick(trees); const spots = [[c, r + 1], [c - 1, r], [c + 1, r]].filter(t => walkable(...t)); if (spots.length) return goTo(p, pick(spots), 'walk', 'going to look at a tree'); }
-  if (roll < 0.70) return goTo(p, pick(walkTiles.filter(([, r]) => r === 6)), 'walk', 'going to look at the sky');
+  if (roll < 0.70) return goTo(p, pick(walkTiles.filter(([, r]) => r === SKY)), 'walk', 'going to look at the sky');
   if (roll < 0.75 && pondSide.length) return goTo(p, pick(pondSide), 'walk', 'going to feed the ducks');
   if (roll < 0.79) { const dog = nearestDog(p); const spots = spotsAround(dog.c, dog.r); if (spots.length) return goTo(p, pick(spots), 'walk', 'going to pet the dog'); }
-  if (roll < 0.83 && bus.riders.length < 4) return goTo(p, pick([[19, 6], [20, 6], [21, 6]]), 'walk', 'going to catch the bus');
+  if (roll < 0.83 && bus.riders.length < 4) return goTo(p, pick(BUS_WAIT), 'walk', 'going to catch the bus');
   if (roll < 0.90) {
     let g = pick(groups.filter(g => g.members.length < 5));
     if (!g) { const q = pick(people.filter(o => o !== p && o.act === 'idle' && !o.inside && !o.joining)); if (q) { g = { members: [q] }; groups.push(g); q.group = g; q.act = 'chat'; q.wait = rnd(10, 25); q.say = pick(TOPICS); q.nextSay = rnd(2, 5); q.desc = 'waiting to chat'; } }
@@ -169,7 +174,7 @@ function arrived(p) {
   if (/sit/.test(p.desc)) { p.act = 'sit'; p.desc = 'sitting on a bench'; p.wait = rnd(8, 20); return; }
   if (/shelter/.test(p.desc)) { p.desc = 'sheltering under a tree'; p.say = '☔️'; p.wait = rnd(8, 20); p.act = 'idle'; return; }
   if (/look at/.test(p.desc)) { p.desc = p.desc.replace('going to look at', 'looking at'); p.say = '👀'; p.wait = rnd(4, 8); p.act = 'idle'; return; }
-  if (/ducks/.test(p.desc)) { p.desc = 'feeding the ducks'; p.say = '🍞'; p.wait = rnd(6, 12); p.act = 'idle'; p.flip = p.x > (pond.c + 1.5) * T; for (const d of ducks) d.lure = p; return; }
+  if (/ducks/.test(p.desc)) { p.desc = 'feeding the ducks'; p.say = '🍞'; p.wait = rnd(6, 12); p.act = 'idle'; p.flip = false; for (const d of ducks) d.lure = p; return; }
   if (/pet the dog/.test(p.desc)) { const dog = nearestDog(p); if (Math.hypot(dog.c - p.c, dog.r - p.r) <= 1.5) { p.desc = `petting ${dog.name}`; p.say = '🐶'; dog.say = '❤️'; dog.wait = 4; dog.route = []; dog.follow = p; } else { p.desc = 'looking for the dog'; p.say = '🤔'; } p.wait = rnd(3, 6); p.act = 'idle'; return; }
   if (/catch the bus/.test(p.desc)) { p.desc = 'waiting for the bus'; p.act = 'idle'; p.wait = rnd(40, 70); p.say = ''; return; }
   p.act = 'idle'; p.desc = 'standing around'; p.wait = rnd(1, 5);
@@ -283,14 +288,14 @@ function tickSquirrel(q, dt) {
   }
   if ((q.wait -= dt) <= 0) hideSquirrel(q);                   // pause at the foot of the tree, then climb
 }
-const ducks = Array.from({ length: 3 }, (_, i) => ({ x: (pond.c + 0.5 + i) * T, y: (pond.r + 0.5 + (i % 2)) * T, tx: 0, ty: 0, wait: rnd(0, 2), flip: false, lure: null, say: '' }));
+const ducks = Array.from({ length: 4 }, (_, i) => ({ x: (2 + i * 3) * T, y: (pond.r + 0.6 + (i % 2) * 0.7) * T, tx: 0, ty: 0, wait: rnd(0, 2), flip: false, lure: null, say: '' }));
 function tickDucks(dt) {
   for (const d of ducks) {
     if (d.lure && (d.lure.desc !== 'feeding the ducks')) d.lure = null;
     if (d.scared > 0) { d.scared -= dt; d.lure = null; if (d.wait > 0.3) d.wait = 0.3; }
     if ((d.wait -= dt) <= 0) {
       d.say = Math.random() < 0.12 ? '🦆' : '';
-      const left = pond.c * T + 2, right = (pond.c + pond.w) * T - 3, top = pond.r * T + 2, bottom = (pond.r + pond.h) * T - 3;
+      const left = 2, right = pond.w * T - 4, top = pond.r * T + 2, bottom = H - 3;
       if (d.lure) { d.tx = clamp(d.lure.x + rnd(-6, 6), left, right); d.ty = clamp(d.lure.y + rnd(-4, 4), top, bottom); }
       else { d.tx = rnd(left, right); d.ty = rnd(top, bottom); }
       d.wait = rnd(1.5, 4);
@@ -298,13 +303,14 @@ function tickDucks(dt) {
     const dx = d.tx - d.x, dy = d.ty - d.y, L = Math.hypot(dx, dy); if (L > 0.5) { const sp = d.scared > 0 ? 22 : d.lure ? 10 : 4; d.x += dx / L * Math.min(sp * dt, L); d.y += dy / L * Math.min(sp * dt, L); d.flip = dx < 0; }
   }
 }
-const bus = { type: 'bus', x: -40, state: 'away', timer: rnd(20, 50), riders: [], stopX: BUS_STOP[0] * T - 6, y: 6 * T - 1 };
+const bus = { type: 'bus', x: LANE.c * T, y: H + 30, state: 'away', timer: rnd(20, 50), riders: [], stopX: 21 * T - 4, laneY: LANE.r * T + 8, w: 24, h: 10 };
 function tickBus(dt) {
   bus.timer -= dt;
-  if (bus.state === 'away' && bus.timer <= 0) { bus.state = 'arriving'; bus.x = -40; }
-  if (bus.state === 'arriving') { bus.x += 60 * dt; if (bus.x >= bus.stopX) { bus.x = bus.stopX; bus.state = 'stopped'; bus.timer = 6; stopBus(); } }
+  if (bus.state === 'away' && bus.timer <= 0) { bus.state = 'rising'; bus.x = LANE.c * T; bus.y = H + 30; }
+  if (bus.state === 'rising') { bus.y -= 40 * dt; if (bus.y <= bus.laneY) { bus.y = bus.laneY; bus.state = 'arriving'; bus.x = LANE.c * T - 10; } }
+  if (bus.state === 'arriving') { bus.x += 50 * dt; if (bus.x >= bus.stopX) { bus.x = bus.stopX; bus.state = 'stopped'; bus.timer = 6; stopBus(); } }
   if (bus.state === 'stopped' && bus.timer <= 0) bus.state = 'leaving';
-  if (bus.state === 'leaving') { bus.x += 60 * dt; if (bus.x > W + 10) { bus.state = 'away'; bus.timer = rnd(60, 120); } }
+  if (bus.state === 'leaving') { bus.x += 50 * dt; if (bus.x > W + 10) { bus.state = 'away'; bus.timer = rnd(60, 120); } }
 }
 function stopBus() {
   for (const p of bus.riders) { p.inside = null; p.c = BUS_STOP[0]; p.r = BUS_STOP[1]; p.x = p.c * T + 4; p.y = p.r * T + 4; p.act = 'idle'; p.desc = 'just got off the bus'; p.say = pick(['😮‍💨', '🧳', '']); p.wait = rnd(1, 4); }
@@ -323,7 +329,7 @@ function tickAmbient(dt, now) {
   for (const b of buildings) if (b.chimney && (b.lit || SEASON === 'winter') && Math.random() < 0.03) particles.push({ k: 'smoke', x: b.c * T + b.w * T - 3, y: b.r * T - 2, vx: rnd(2, 5), vy: -6, t: rnd(1.5, 3) });
   for (let i = particles.length - 1; i >= 0; i--) {
     const f = particles[i]; if (f.k === 'confetti') f.vy += 120 * dt; f.x += f.vx * dt; f.y += f.vy * dt; f.t -= dt;
-    if (f.t < 0 || f.y > H || (f.k !== 'smoke' && f.k !== 'confetti' && f.y > 3 * T && (f.k === 'rain' || f.k === 'snow') && f.y > groundHit(f.x))) particles.splice(i, 1);
+    if (f.t < 0 || f.y > H || (f.k !== 'smoke' && f.k !== 'confetti' && f.y > SKY * T && (f.k === 'rain' || f.k === 'snow') && f.y > groundHit(f.x))) particles.splice(i, 1);
   }
 }
 function groundHit(x) { return H - 2 + (hash(String(Math.floor(x))) % 30) - 15; }
@@ -422,44 +428,68 @@ function drawSquirrel(q) {
   if (q.hidden) return; const x = Math.round(q.x), y = Math.round(q.y), step = q.route.length ? Math.floor(q.frame * 12) % 2 : 0;
   px(x - 1, y, '#9a4a20', 2, 1); px(q.flip ? x + 1 : x - 2, y - 1, '#b05a28', 1, 2); px(q.flip ? x - 2 : x + 1, y - step, '#9a4a20', 1, 1);
 }
+function drawShelter(n) {                                                      // glass bus shelter straddling the three waiting tiles
+  const x = BUS_WAIT[0][0] * T, y = BUS_STOP[1] * T;
+  px(x, y - 4, '#2d3340', 24, 2); px(x + 1, y - 2, 'rgba(160,200,230,0.35)', 22, 9); px(x, y - 2, '#2d3340', 1, 10); px(x + 23, y - 2, '#2d3340', 1, 10);
+  px(x + 10, y - 7, '#2d3340', 1, 3); px(x + 9, y - 8, '#e8b020', 3, 2);
+  if (n > 0.3) { ctx.fillStyle = `rgba(255,240,200,${0.18 * n})`; ctx.fillRect(x + 1, y - 2, 22, 9); }
+}
 function drawDuck(d) { const x = Math.round(d.x), y = Math.round(d.y); px(x, y, '#f2e8c0', 2, 1); px(d.flip ? x - 1 : x + 2, y - 1, '#f2e8c0', 1, 1); px(d.flip ? x - 2 : x + 3, y - 1, '#e8a020', 1, 1); if (d.say) label(d.say, x + 1, y - 4, '#fff', 4.5, 'center', false); }
 function drawBus() {
   if (bus.state === 'away') return;
-  const x = Math.round(bus.x), y = bus.y - 6;
-  px(x, y, '#e8b020', 16, 6); px(x + 1, y + 1, '#9fd8ff', 3, 2); px(x + 5, y + 1, '#9fd8ff', 3, 2); px(x + 9, y + 1, '#9fd8ff', 3, 2); px(x + 13, y + 1, '#9fd8ff', 2, 2);
-  px(x + 2, y + 6, '#222', 2, 1); px(x + 12, y + 6, '#222', 2, 1); if (bus.state === 'stopped') px(x + 7, y + 3, '#2a1a0e', 2, 3);
-  if (night() > 0.5) px(x + 15, y + 4, '#ffe', 1, 1);
+  const dark = night() > 0.5;
+  if (bus.state === 'rising') {                                                 // seen from behind as it climbs out of the bottom edge
+    const x = Math.round(bus.x) + 2, y = Math.round(bus.y) - 14;
+    px(x, y, '#e8b020', 12, 14); px(x + 1, y + 1, '#9fd8ff', 10, 4); px(x + 1, y + 11, '#d33', 2, 2); px(x + 9, y + 11, '#d33', 2, 2); px(x + 4, y + 7, '#222', 4, 3);
+    px(x, y + 14, '#222', 3, 1); px(x + 9, y + 14, '#222', 3, 1); return;
+  }
+  const x = Math.round(bus.x), y = Math.round(bus.y) - bus.h;                  // side view
+  px(x, y, '#e8b020', bus.w, bus.h - 2); px(x, y, '#c8901a', bus.w, 1);
+  for (let i = 0; i < 4; i++) px(x + 2 + i * 5, y + 2, '#9fd8ff', 3, 3);
+  px(x + bus.w - 3, y + 2, '#9fd8ff', 2, 3);                                     // windscreen
+  px(x + 1, y + bus.h - 2, '#444', 4, 2); px(x + bus.w - 6, y + bus.h - 2, '#444', 4, 2);   // wheels
+  px(x + 2, y + bus.h - 2, '#999', 2, 1); px(x + bus.w - 5, y + bus.h - 2, '#999', 2, 1);
+  if (bus.state === 'stopped') px(x + 10, y + 2, '#2a1a0e', 3, 6); else px(x + 10, y + 2, '#c8901a', 3, 6);   // door (open when stopped)
+  if (dark) { px(x + bus.w - 1, y + 5, '#ffe', 1, 1); for (let i = 0; i < 4; i++) px(x + 2 + i * 5, y + 2, '#ffe28a', 3, 3); }
 }
 function draw(now) {
   const n = night();
-  hctx.clearRect(0, 0, hi.width, hi.height);
+  ctx.clearRect(0, 0, W, H); hctx.clearRect(0, 0, hi.width, hi.height);
   // sky
   const cloudy = weather.type !== 'clear' ? 0.35 : 0;
   ctx.fillStyle = mode === 'incident' ? `rgb(${95 - 50 * n},${40 - 20 * n},${50 - 25 * n})` : `rgb(${lerp(120, 150, cloudy) - 105 * n},${lerp(175, 160, cloudy) - 150 * n},${lerp(225, 175, cloudy) - 170 * n})`;
-  ctx.fillRect(0, 0, W, 3 * T);
-  if (n > 0.5) for (let i = 0; i < 25; i++) px((i * 97) % W, (i * 53) % 20, '#ddd');
-  px(W - 22, 6, n > 0.5 ? '#f0f0e0' : '#ffd34d', 6, 6);
-  for (let i = 0; i < (weather.type === 'clear' ? 2 : 5); i++) { const cx = ((now / (900 + i * 150)) + i * 61) % (W + 40) - 20, cy = 3 + (i * 7) % 14; const c = `rgba(${235 - 70 * n},${235 - 70 * n},${240 - 70 * n},${weather.type === 'clear' ? 0.6 : 0.9})`; px(cx, cy, c, 14, 3); px(cx + 3, cy - 2, c, 7, 2); }
+  ctx.fillRect(0, 0, W, SKY * T);
+  if (n > 0.5) for (let i = 0; i < 25; i++) px((i * 97) % W, (i * 53) % 14, '#ddd');
+  px(W - 22, 3, n > 0.5 ? '#f0f0e0' : '#ffd34d', 6, 6);
+  for (let i = 0; i < (weather.type === 'clear' ? 2 : 5); i++) { const cx = ((now / (900 + i * 150)) + i * 61) % (W + 40) - 20, cy = 2 + (i * 5) % 9; const c = `rgba(${235 - 70 * n},${235 - 70 * n},${240 - 70 * n},${weather.type === 'clear' ? 0.6 : 0.9})`; px(cx, cy, c, 14, 3); px(cx + 3, cy - 2, c, 7, 2); }
   for (const b of birds) { px(b.x, b.y, '#333', 1, 1); px(b.x + (Math.floor(now / 150) % 2 ? 1 : -1), b.y - 1, '#333', 1, 1); px(b.x + (Math.floor(now / 150) % 2 ? -1 : 1), b.y - 1, '#333', 1, 1); }
   // ground
-  px(0, 3 * T, rgbn(PAL.grass, n), W, H - 3 * T);
-  for (const r of [6, 10]) { px(0, r * T, PAL.snow ? `rgb(${120 - 50 * n},${120 - 50 * n},${128 - 50 * n})` : `rgb(${88 - 40 * n},${88 - 40 * n},${94 - 40 * n})`, W, T); for (let x = 2; x < W; x += 8) px(x, r * T + 3.5, '#cfc89a', 4, 1); }
+  px(0, SKY * T, rgbn(PAL.grass, n), W, H - SKY * T);
+  const pathCol = PAL.snow ? `rgb(${215 - 70 * n},${212 - 70 * n},${205 - 70 * n})` : `rgb(${196 - 70 * n},${176 - 65 * n},${132 - 50 * n})`;
+  for (const r of [6, 10]) { px(0, r * T + 1, pathCol, W, 6); for (let x = 1; x < W; x += 5) px(x, r * T + 2 + (x * 7) % 4, PAL.snow ? '#cdd' : `rgb(${170 - 60 * n},${150 - 55 * n},${110 - 40 * n})`, 2, 1); }   // footpaths
+  for (let x = 0; x < W; x += 6) px(x, SKY * T + 5, pathCol, 3, 1);                                        // faint track along the back alley
   px(9 * T, 7 * T, `rgb(${150 - 60 * n},${140 - 60 * n},${120 - 50 * n})`, 12 * T, 3 * T);                       // plaza
   for (let x = 0; x < W; x += 3) px(x, 13 * T, `rgba(90,70,40,${n > 0.5 ? 0.5 : 0.8})`, 2, 1);                 // park path edge
-  px(pond.c * T, pond.r * T, PAL.snow && weather.type !== 'rain' ? `rgb(${170 - 60 * n},${200 - 70 * n},${225 - 80 * n})` : `rgb(${50 - 20 * n},${110 - 50 * n},${180 - 80 * n})`, pond.w * T, pond.h * T);
-  for (let x = pond.c * T - 1; x <= (pond.c + pond.w) * T; x += 3) { px(x, pond.r * T - 2, '#7a5a30', 1, 2); px(x, (pond.r + pond.h) * T, '#7a5a30', 1, 2); }
+  const water = PAL.snow && weather.type !== 'rain' ? `rgb(${170 - 60 * n},${200 - 70 * n},${225 - 80 * n})` : `rgb(${50 - 20 * n},${110 - 50 * n},${180 - 80 * n})`;
+  const pr = pond.w * T, pt = pond.r * T;                                                                      // pond: a curved shoreline, off the left and bottom edges
+  ctx.fillStyle = water; ctx.beginPath(); ctx.moveTo(0, pt + 2); ctx.quadraticCurveTo(pr * 0.35, pt - 2, pr * 0.6, pt + 1); ctx.quadraticCurveTo(pr - 2, pt + 3, pr, H); ctx.lineTo(0, H); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = rgbn([120, 100, 60], n); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, pt + 1.5); ctx.quadraticCurveTo(pr * 0.35, pt - 2.5, pr * 0.6, pt + 0.5); ctx.quadraticCurveTo(pr - 2.5, pt + 2.5, pr - 0.5, H); ctx.stroke();   // bank
+  if (!PAL.snow) for (let i = 0; i < 6; i++) px((i * 37 + Math.floor(now / 400)) % (pond.w * T - 10), pond.r * T + 4 + (i * 5) % 10, 'rgba(255,255,255,0.35)', 3, 1);   // ripples
+  const asphalt = `rgb(${84 - 38 * n},${86 - 38 * n},${92 - 38 * n})`;
+  ctx.fillStyle = asphalt; ctx.beginPath(); ctx.moveTo(LANE.c * T, H); ctx.quadraticCurveTo(LANE.c * T, LANE.r * T, LANE.c * T + 16, LANE.r * T); ctx.lineTo(W, LANE.r * T); ctx.lineTo(W, H); ctx.closePath(); ctx.fill();   // lane curving up from the bottom
+  ctx.strokeStyle = `rgb(${150 - 60 * n},${150 - 60 * n},${150 - 60 * n})`; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(LANE.c * T + 0.5, H); ctx.quadraticCurveTo(LANE.c * T + 0.5, LANE.r * T + 0.5, LANE.c * T + 16, LANE.r * T + 0.5); ctx.lineTo(W, LANE.r * T + 0.5); ctx.stroke();   // kerb line
   for (const [c, r] of flowers) if (SEASON !== 'winter') for (let i = 0; i < 3; i++) px(c * T + 1 + i * 3, r * T + 3 + (i % 2) * 2, SEASON === 'spring' ? pick(['#f7a', '#fd6', '#fff']) : SEASON === 'summer' ? '#e44' : '#c84', 1, 1);
   px(fountain.c * T + 1, fountain.r * T + 1, '#889', 14, 14); px(fountain.c * T + 3, fountain.r * T + 3, PAL.snow ? '#cde' : '#5ac', 10, 10);
   if (!PAL.snow) px(fountain.c * T + 7, fountain.r * T + 3 + Math.round(Math.sin(now / 90)), '#cff', 2, 4);
   for (const [c, r] of benches) { px(c * T + 1, r * T + 4, '#6b4a2a', 6, 2); px(c * T + 1, r * T + 6, '#4a3018', 1, 1); px(c * T + 6, r * T + 6, '#4a3018', 1, 1); }
-  px(BUS_STOP[0] * T + 7, 6 * T - 6, '#345', 1, 6); px(BUS_STOP[0] * T + 6, 6 * T - 7, '#e8b020', 3, 2);          // bus stop sign
-  for (const b of buildings) drawBuilding(b, n, now);
   const drawables = [
+    ...buildings.map(b => ({ y: (b.r + b.h) * T - 0.5, f: () => drawBuilding(b, n, now) })),
+    { y: BUS_STOP[1] * T - 0.5, f: () => drawShelter(n) },
     ...people.map(p => ({ y: p.y, f: () => drawPerson(p, now) })),
     ...dogs.map(d => ({ y: d.y, f: () => drawDog(d) })),
     ...squirrels.map(q => ({ y: q.y, f: () => drawSquirrel(q) })),
     ...ducks.map(d => ({ y: d.y, f: () => drawDuck(d) })),
-    { y: bus.y + 1, f: drawBus },
+    { y: bus.state === 'rising' ? H + 1 : bus.y + 1, f: drawBus },
     ...trees.map(([c, r]) => ({ y: r * T + 6, f: () => { px(c * T + 3, r * T + 2, '#5a3b1e', 2, 6); if (SEASON === 'winter') { px(c * T + 1, r * T - 2, '#5a3b1e', 1, 4); px(c * T + 6, r * T - 1, '#5a3b1e', 1, 3); px(c * T + 2, r * T - 3, '#eef', 5, 1); } else { px(c * T, r * T - 3, rgbn(PAL.tree, n), 8, 7); if (SEASON === 'spring') { px(c * T + 2, r * T - 2, '#f9c', 1, 1); px(c * T + 5, r * T + 1, '#f9c', 1, 1); } } } })),
     ...lamps.map(([c, r]) => ({ y: r * T + 1, f: () => { px(c * T + 3, r * T - 7, '#345', 1, 8); px(c * T + 2, r * T - 8, n > 0.3 ? '#ffe28a' : '#9ab', 3, 2); if (n > 0.3) { ctx.fillStyle = `rgba(255,220,120,${0.12 * n})`; ctx.fillRect(c * T - 3, r * T - 6, 13, 12); } } })),
   ];
@@ -506,9 +536,11 @@ cv.onmousemove = e => {
   else if (dogs.some(d => Math.hypot(d.x - mx, d.y - my) < 5)) { const d = dogs.find(d => Math.hypot(d.x - mx, d.y - my) < 5); tip.textContent = `${d.name} (${d.temperament}) — ${d.desc}`; }
   else if (squirrels.some(q => !q.hidden && Math.hypot(q.x - mx, q.y - my) < 4)) tip.textContent = 'squirrel — making a run for it';
   else if (ducks.some(d => Math.hypot(d.x - mx, d.y - my) < 4)) tip.textContent = `duck — ${ducks.some(d => d.scared > 0) ? 'fleeing a dog' : ducks.some(d => d.lure) ? 'coming for bread' : 'paddling'}`;
-  else if (bus.state !== 'away' && mx >= bus.x && mx < bus.x + 16 && my >= bus.y - 6 && my < bus.y + 1) tip.textContent = `bus — ${bus.riders.length ? 'carrying ' + bus.riders.map(p => p.name).join(', ') : 'empty'}`;
+  else if (bus.state !== 'away' && mx >= bus.x && mx < bus.x + bus.w && my >= bus.y - 14 && my < bus.y + 1) tip.textContent = `bus — ${bus.riders.length ? 'carrying ' + bus.riders.map(p => p.name).join(', ') : 'empty'}`;
+  else if (my >= LANE.r * T && mx >= LANE.c * T) tip.textContent = 'bus lane';
+  else if (my >= pond.r * T && mx < pond.w * T) tip.textContent = 'pond';
   else if (b) { const ins = people.filter(q => q.inside === b).map(q => q.name); tip.textContent = `${b.type}${ins.length ? ' — inside: ' + ins.join(', ') : ''}`; }
-  else if (my < 3 * T) tip.textContent = `${SEASON}, ${weather.type}${southern ? ' (southern hemisphere)' : ''}`;
+  else if (my < SKY * T) tip.textContent = `${SEASON}, ${weather.type}${southern ? ' (southern hemisphere)' : ''}`;
   else { tip.style.display = 'none'; return; }
   tip.style.display = 'block'; tip.style.left = e.clientX + 12 + 'px'; tip.style.top = e.clientY + 12 + 'px';
 };
