@@ -4,7 +4,7 @@ import { cv, ctx, hi, hctx, fitOverlay, label } from './canvas.js';
 import { people, tickPerson } from './people.js';
 import { dogs, tickDog, ducks, tickDucks, squirrels, tickSquirrel, geese, tickGeese, geeseOnGround } from './animals.js';
 import { bus, tickBus, tickAmbient, particles, birds } from './town.js';
-import { onEvent, connect, ticker } from './events.js';
+import { onEvent, connect } from './events.js';
 import * as draw from './sprites.js';
 
 const params = new URLSearchParams(location.search);
@@ -52,7 +52,6 @@ function render(now) {
   draw.drawTints(n);
   const d = new Date();
   label(`${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')} ${WICON[weather.type]}`, 2, 5, 'rgba(255,255,255,0.85)', 5.5, 'left', true);
-  if (now < ticker.until) { ctx.fillStyle = '#000a'; ctx.fillRect(0, H - 9, W, 9); label(ticker.text.slice(0, 70), 2, H - 4.5, '#fff', 6, 'left'); }
 }
 
 // ---------- hover: one list of hit targets, nearest wins, then area fallbacks ----------

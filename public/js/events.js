@@ -5,8 +5,7 @@ import { people, clearGroups, leave, send, sendToWork } from './people.js';
 import { geese, spawnGeese } from './animals.js';
 import { bus, summonBus, burst } from './town.js';
 
-export const ticker = { text: '', until: 0 };
-export function say(msg, secs = 6) { ticker.text = msg; ticker.until = performance.now() + secs * 1000; }
+export function say() {}                                        // banners are gone; the dev status line is the only readout
 
 const outside = () => people.filter(p => !p.inside);
 // a share of the people outside react with an emoji for a moment
@@ -41,7 +40,7 @@ function showStatus() { if (statusEl) statusEl.textContent = `${connected ? '●
 
 export function onEvent(ev) {
   const msg = ev.msg ? `: ${ev.msg}` : '';
-  if (ev.type !== 'hello') { const t = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); lastSignal = `${ICON[ev.type] || '·'} ${ev.type}${ev.msg ? ' ' + ev.msg : ''} (${t})`; showStatus(); }
+  if (ev.type !== 'hello') { const t = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); const repo = (ev.msg || '').split(/[:→]/)[0].trim(); lastSignal = `${ICON[ev.type] || '·'} ${ev.type}${repo ? ' ' + repo : ''} (${t})`; showStatus(); }
   const h = HANDLERS[ev.type];
   if (h) return h(ev, msg);
   const p = pick(people.filter(p => !p.inside)) || people[0]; p.say = '❓️'; p.wait = Math.max(p.wait, 3); say(ev.type + msg);
