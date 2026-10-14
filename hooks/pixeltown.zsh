@@ -26,6 +26,10 @@ typeset -ga PIXELTOWN_LONG
 PIXELTOWN_LONG=(
   'dev server:server'
   'dev up:up'
+  'dev console:console'
+  'dev c :console'
+  'bin/rails console:console'
+  'bin/rails c:console'
   'bin/rails server:server'
   'npm run dev:server'
   'pnpm dev:server'
@@ -38,7 +42,7 @@ _pixeltown_preexec() {
   local entry prefix label
   for entry in $PIXELTOWN_LONG; do
     prefix="${entry%%:*}"; label="${entry##*:}"
-    if [[ "$1" == "$prefix"* ]]; then _PIXELTOWN_LONG="$label"; _pixeltown_post "${label}_start" "$label"; return; fi
+    if [[ "$1" == "$prefix"* || "$1 " == "$prefix" ]]; then _PIXELTOWN_LONG="$label"; _pixeltown_post "${label}_start" "$label"; return; fi
   done
   for entry in $PIXELTOWN_CHECKS; do
     prefix="${entry%%:*}"; label="${entry##*:}"

@@ -2,7 +2,7 @@ import { T, W, H, SKY, SEASON, southern, night, weather, WICON, nowDate, clock, 
 import { cv, ctx, hi, hctx, fitOverlay, label } from './canvas.js';
 import { people, tickPerson, picnics, tickPicnics, tickNotices } from './people.js';
 import { dogs, tickDog, ducks, tickDucks, squirrels, tickSquirrel, geese, tickGeese, gooseAirborne } from './animals.js';
-import { bus, tickBus, tickAmbient, particles, birds, van, carrier, tickMail, truck, tickTruck, workers, plane, parcels, tickAirDrop } from './town.js';
+import { bus, tickBus, tickAmbient, particles, birds, van, carrier, tickMail, truck, tickTruck, workers, plane, parcels, tickAirDrop, cat, tickCat } from './town.js';
 import { onEvent, connect } from './events.js';
 import * as draw from './sprites.js';
 
@@ -22,7 +22,7 @@ function frame(now) {
   for (const p of people) tickPerson(p, dt); tickPicnics(); tickNotices();
   for (const d of dogs) tickDog(d, dt);
   for (const q of squirrels) tickSquirrel(q, dt);
-  tickGeese(dt); tickDucks(dt); tickBus(dt); tickMail(dt); tickTruck(dt); tickAirDrop(dt); tickAmbient(dt);
+  tickGeese(dt); tickDucks(dt); tickBus(dt); tickMail(dt); tickTruck(dt); tickAirDrop(dt); tickCat(dt); tickAmbient(dt);
   render(now);
   requestAnimationFrame(frame);
 }
@@ -36,6 +36,7 @@ function render(now) {
   const layer = [
     ...buildings.map(b => ({ y: (b.r + b.h) * T - 0.5, f: () => draw.drawBuilding(b, n, now) })),
     { y: BUS_STOP[1] * T - 0.5, f: () => draw.drawShelter(n) },
+    ...(cat.state === 'inside' || cat.state === 'hidden' ? [] : [{ y: (cat.row + 3) * T - 0.4, f: () => draw.drawCat(cat, now) }]),
     ...people.map(p => ({ y: p.y, f: () => draw.drawPerson(p, now) })),
     ...dogs.map(d => ({ y: d.y, f: () => draw.drawDog(d) })),
     ...squirrels.map(q => ({ y: q.y, f: () => draw.drawSquirrel(q) })),
@@ -69,6 +70,7 @@ function hitTargets() {
   for (const d of dogs) t.push({ x: d.x, y: d.y, r: 5, text: `${d.name} (${d.temperament}) — ${d.desc}` });
   if (carrier.active) t.push({ x: carrier.x, y: carrier.y + 2, r: 5, text: `mail carrier — ${carrier.desc}` });
   for (const q of parcels) t.push({ x: q.x, y: q.y - 2, r: 5, text: q.chute ? 'parcel — coming down' : dogs.some(d => d.parcel === q) ? `parcel — ${dogs.find(d => d.parcel === q).name} is going for it` : q.claimed ? `parcel — ${q.claimed.name} is on the way` : 'parcel — waiting to be collected' });
+  if (cat.state !== 'inside' && cat.state !== 'hidden') t.push({ x: cat.x, y: cat.y - 2, r: 5, text: `cat — ${cat.desc}` });
   for (const w of workers) t.push({ x: w.x, y: w.y + 2, r: 5, text: `${w.name} (crew) — ${w.desc}` });
   if (geese.state !== 'away') for (const g of geese.birds) t.push({ x: g.x, y: g.y, r: 5, text: `canada goose — ${geese.menace ? `${geese.check} failed; on the warpath` : geese.state === 'landed' ? `waiting on ${geese.check || 'the checks'}` : geese.state === 'leaving' ? 'leaving in a huff' : 'flying in'}` });
   for (const q of squirrels) if (!q.hidden) t.push({ x: q.x, y: q.y, r: 4, text: 'squirrel — making a run for it' });

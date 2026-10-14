@@ -1,5 +1,5 @@
 import { rnd, ri, pick, hash, moveToward } from './util.js';
-import { T, W, H, SKY, SEASON, night, wet, weather, rollWeather, buildings, trees, fountain, LANE, BUS_STOP, tileX, tileY, doorOf, path, followRoute, reno, siteSpots, walkTiles } from './world.js';
+import { T, W, H, SKY, SEASON, night, wet, weather, rollWeather, buildings, trees, fountain, LANE, BUS_STOP, tileX, tileY, doorOf, path, followRoute, reno, siteSpots, walkTiles, roofY } from './world.js';
 import { people, leaveGroup, addVisitor } from './people.js';
 
 // ---------- vehicles that use the lane: rise out of the bottom edge at the curve, turn right, stop, leave to the right ----------
@@ -157,6 +157,37 @@ export function tickAirDrop(dt) {
     p.sway += dt * 3; p.x += (p.tx - p.x) * dt * 1.5 + Math.sin(p.sway) * 6 * dt; p.y += 14 * dt;
     if (p.y >= p.ty) { p.y = p.ty; p.x = p.tx; p.chute = false; }
   }
+}
+
+// ---------- the cat: lives on the rooftops and minds her own business ----------
+export const cat = { x: 0, y: 0, row: 3, state: 'sit', wait: 3, tx: 0, frame: 0, flip: false, say: '', coat: '#141414', tail: '#0a0a0a', desc: 'minding her own business', sheltering: false };
+const rowBuildings = r => buildings.filter(b => b.r === r).sort((a, b) => a.c - b.c);
+const under = (r, x) => rowBuildings(r).find(b => x >= b.c * T && x < (b.c + b.w) * T);
+const segment = (r, x) => { const row = rowBuildings(r), b = under(r, x) || row[0]; let i = row.indexOf(b), lo = i, hi = i; while (lo > 0 && row[lo - 1].c + row[lo - 1].w === row[lo].c) lo--; while (hi < row.length - 1 && row[hi].c + row[hi].w === row[hi + 1].c) hi++; return row.slice(lo, hi + 1); };
+const roofAt = (r, x) => { const b = rowBuildings(r).find(b => x >= b.c * T && x < (b.c + b.w) * T); return b ? roofY(b) : null; };
+{ const b = pick(rowBuildings(3)); cat.x = (b.c + b.w / 2) * T; cat.y = roofY(b); }
+export function tickCat(dt) {
+  cat.frame += dt;
+  if (cat.state === 'inside') { if (wet()) return; cat.state = 'sit'; cat.wait = rnd(5, 15); cat.desc = 'back out now the weather has cleared'; }
+  if (wet() && !cat.sheltering) { const b = segment(cat.row, cat.x).sort((a, b) => Math.abs((a.c + a.w / 2) * T - cat.x) - Math.abs((b.c + b.w / 2) * T - cat.x))[0]; cat.tx = (b.c + b.w / 2) * T; cat.flip = cat.tx < cat.x; cat.state = 'walk'; cat.sheltering = true; cat.say = ''; cat.desc = 'heading in out of the weather'; }
+  const ry = roofAt(cat.row, cat.x);
+  if (ry !== null) cat.y += (ry - cat.y) * Math.min(1, dt * 12);
+  if (cat.state === 'walk') {
+    cat.x += (cat.flip ? -1 : 1) * 9 * dt;
+    if ((cat.flip && cat.x <= cat.tx) || (!cat.flip && cat.x >= cat.tx)) { cat.x = cat.tx; if (cat.sheltering) { cat.sheltering = false; cat.state = 'inside'; cat.desc = 'indoors, waiting out the weather'; return; } if (cat.slinking) { cat.slinking = false; cat.state = 'hidden'; cat.wait = rnd(3, 7); cat.desc = 'somewhere behind the buildings'; return; } cat.state = pick(['sit', 'sit', 'loaf']); cat.wait = rnd(6, 25); cat.desc = cat.state === 'loaf' ? 'loafing on a roof' : 'watching from a roof'; }
+    return;
+  }
+  if ((cat.wait -= dt) > 0) { if (Math.random() < 0.003) cat.say = cat.say ? '' : pick(cat.state === 'loaf' ? ['💤'] : ['👀', '🐾', '😼']); return; }
+  cat.say = '';
+  if (cat.state === 'hidden') {
+    cat.row = cat.nextRow; const b = pick(rowBuildings(cat.row)); cat.x = (b.c + b.w / 2) * T; cat.y = roofY(b);
+    cat.state = 'sit'; cat.wait = rnd(5, 15); cat.desc = 'turned up on a different roof';
+    return;
+  }
+  const r = Math.random();
+  if (r < 0.12) { cat.nextRow = pick([3, 7, 11].filter(r => r !== cat.row)); const seg = segment(cat.row, cat.x), b = cat.x < (seg[0].c + seg.at(-1).c + seg.at(-1).w) * T / 2 ? seg[0] : seg.at(-1); cat.tx = b === seg[0] ? b.c * T + 1 : (b.c + b.w) * T - 2; cat.flip = cat.tx < cat.x; cat.state = 'walk'; cat.slinking = true; cat.desc = 'slinking off behind the buildings'; return; }
+  if (r < 0.4) { cat.state = cat.state === 'loaf' ? 'sit' : 'loaf'; cat.wait = rnd(8, 25); cat.desc = cat.state === 'loaf' ? 'loafing on a roof' : 'watching from a roof'; return; }
+  const b = pick(segment(cat.row, cat.x)); cat.tx = (b.c + b.w / 2) * T; cat.flip = cat.tx < cat.x; cat.state = 'walk'; cat.desc = 'padding along the rooftops';
 }
 
 // ---------- particles and birds ----------

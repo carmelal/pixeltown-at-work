@@ -40,6 +40,7 @@ export const WICON = { clear: '☀️', cloudy: '☁️', rain: '🌧️', snow:
 // ---------- global mood (set by events) ----------
 export const mode = { current: 'normal', until: 0 };
 export const cursor = { x: 0, y: 0, active: false };
+export const inquiry = { active: false };
 export const reno = { active: false, site: null, pile: 0, pileTile: null, scaffold: 0 };   // scaffold 0..1 goes up as the crew carries materials over   // while `dev server` runs, a crew renovates one building
 export const siteSpots = b => { const out = []; for (let c = b.c - 1; c <= b.c + b.w; c++) if (walkable(c, b.r + b.h)) out.push([c, b.r + b.h]); return out; };
 
@@ -62,6 +63,8 @@ export const VISITS = {
   clinic: { desc: 'at the clinic', secs: [5, 12], out: ['🩹', '💊', '😷'], open: [8, 18] },
   florist: { desc: 'picking out flowers', secs: [2, 5], out: ['💐', '🌷', '🌻'], open: [9, 18] },
 };
+export const facadeHeight = b => (HEIGHTS[b.type] || 24) + (b.type === 'house' ? (b.hue % 3) : 0);
+export const roofY = b => (b.r + b.h) * T - facadeHeight(b);
 export const isOpen = t => { const v = VISITS[t]; if (!v) return true; const h = hourNow(); return h >= v.open[0] && (h < v.open[1] || h + 24 < v.open[1]); };
 
 export const fountain = { c: 14, r: 7, sprayUntil: 0 };

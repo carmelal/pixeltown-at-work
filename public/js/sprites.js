@@ -1,5 +1,5 @@
 import { clamp, hash, lerp } from './util.js';
-import { T, W, H, SKY, SEASON, PAL, weather, wet, hourNow, nowDate, HEIGHTS, isOpen, pond, fountain, benches, beds, notices, LANE, BUS_STOP, BUS_WAIT, mode, reno } from './world.js';
+import { T, W, H, SKY, SEASON, PAL, weather, wet, hourNow, nowDate, facadeHeight, roofY, isOpen, pond, fountain, benches, beds, notices, LANE, BUS_STOP, BUS_WAIT, mode, reno } from './world.js';
 import { ctx, px, shade, rgbn, grey, label, bubble, blit } from './canvas.js';
 import { geese, gooseAirborne } from './animals.js';
 
@@ -38,7 +38,7 @@ const FACADE = {
 };
 
 export function drawBuilding(b, n, now) {
-  const h = (HEIGHTS[b.type] || 24) + (b.type === 'house' ? (b.hue % 3) : 0), x = b.c * T, y = (b.r + b.h) * T - h, w = b.w * T;
+  const h = facadeHeight(b), x = b.c * T, y = roofY(b), w = b.w * T;
   const roof = PAL.snow ? `rgb(${225 - 90 * n},${228 - 90 * n},${235 - 90 * n})` : b.type === 'office' ? `hsl(215 15% ${shade(30, n)}%)` : `hsl(${(b.hue + 160) % 360} 40% ${shade(32, n)}%)`;
   px(x, y + 3, WALLS(b, n), w, h - 3);
   px(x, y, roof, w, 4);
@@ -70,7 +70,7 @@ export function drawPerson(p, now) {
   const x = Math.round(p.x) - 1, y = Math.round(p.y) - 5, moving = p.route.length > 0, step = moving && Math.floor(p.frame * 7) % 2;
   const dance = mode.current === 'gathering' && !moving ? Math.round(Math.sin(now / 120 + p.x)) : 0;
   const yy = y - Math.abs(dance);
-  const pal = { h: p.hair, s: SKIN, t: p.shirt, l: '#223', r: '#c33', w: '#222' };
+  const pal = p.detective ? { h: p.hair, s: SKIN, t: '#8a7250', l: '#4a3a2a', r: '#c33', w: '#222' } : { h: p.hair, s: SKIN, t: p.shirt, l: '#223', r: '#c33', w: '#222' };
   if (p.bike) blit(PERSON.bike, x - 2, yy - 1, pal);
   else if (p.act === 'fish') {
     blit(PERSON.fish, x, yy - 2, { ...pal, r: '#8a6a3a' });
@@ -79,7 +79,13 @@ export function drawPerson(p, now) {
   else if (p.act === 'sit') blit(PERSON.sit, x, yy, pal);
   else if (p.act === 'work') blit(Math.floor(p.frame * 4) % 2 ? PERSON.step : PERSON.stand, x, yy - 1, pal);
   else blit(step ? PERSON.step : PERSON.stand, x, yy - 1, pal);
-  if (p.hardhat) { px(x - 1, yy - 2, '#f5c400', 5, 1); px(x, yy - 3, '#f5c400', 3, 1); }
+  if (p.detective && p.act !== 'sit' && !p.bike) {
+    px(x - 1, yy - 2, '#5a4a3a', 5, 1); px(x, yy - 3, '#5a4a3a', 3, 1); px(x + (p.flip ? -1 : 3), yy - 2, '#5a4a3a', 1, 1);   // deerstalker: crown plus a peak front and back
+    px(x + (p.flip ? -1 : 3), yy + 1, '#3a2412', 1, 1); px(x + (p.flip ? -2 : 4), yy + 1, '#3a2412', 1, 1);               // pipe
+    if (Math.floor(now / 400) % 3 === 0) px(x + (p.flip ? -2 : 4), yy - 1 - Math.floor(now / 200) % 2, 'rgba(200,200,210,0.6)', 1, 1);   // puff
+    px(x, yy + 5, '#8a7250', 3, 1);                                                                                       // coat hem over the legs
+  }
+  else if (p.hardhat) { px(x - 1, yy - 2, '#f5c400', 5, 1); px(x, yy - 3, '#f5c400', 3, 1); }
   else if (p.hat || (SEASON === 'winter' && hash(p.name) % 2)) px(x - 1, yy - 2, p.hatColor || (SEASON === 'winter' ? p.shirt : '#333'), 5, 1);
   if (p.pkg) { px(x - 2, yy - 7, '#b8863b', 7, 5); px(x - 2, yy - 5, '#d9a65a', 7, 1); px(x + 1, yy - 7, '#d9a65a', 1, 5); }
   bubble(p.say, x + 1.5, yy - 4, 5);
@@ -136,6 +142,14 @@ export function drawGoose(g, now) {
   if ((geese.state === 'landed' && !airborne) || geese.state === 'landing') blit(GOOSE.ground, leftOf(GOOSE.ground, GOOSE.ox, x, g.flip), y - 4, pal, g.flip);
   else { const rows = ((now / 500 + x / 20) % 1) < 0.5 ? GOOSE.flyUp : GOOSE.flyDown; blit(rows, leftOf(rows, 1, x, g.flip), y - 1, { ...pal, w: pal.B }, g.flip); }
   bubble(g.say, x, y - 6);
+}
+const CAT = { sit: ['e.e.', 'hhh.', 'bbbt', '.b.t'], walk: [['e.e.', 'hhh.', 'bbbt', 'l.l.'], ['e.e.', 'hhh.', 'bbbt', '.ll.']], loaf: ['e.e.', 'hhh.', 'bbbt'] };
+export function drawCat(c, now) {
+  const x = Math.round(c.x), y = Math.round(c.y), pal = { e: c.coat, h: c.coat, b: c.coat, t: c.tail, l: c.coat };
+  const rows = c.state === 'walk' ? CAT.walk[Math.floor(c.frame * 6) % 2] : c.state === 'loaf' ? CAT.loaf : CAT.sit;
+  blit(rows, c.flip ? x - 3 : x - 1, y - rows.length, pal, c.flip);
+  if (c.state !== 'loaf') { const hy = y - rows.length + 1; px(x - 1, hy, '#e8e04a', 1, 1); px(x + 1, hy, '#e8e04a', 1, 1); }
+  bubble(c.say, x, y - 7, 4);
 }
 export function drawBird(b, now) { const rows = Math.floor(now / 260 + b.x / 15) % 2 ? BIRD.down : BIRD.up; blit(rows, Math.round(b.x) - 1, Math.round(b.y) - 1, { w: '#333', b: '#333' }); }
 

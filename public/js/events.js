@@ -1,6 +1,6 @@
 import { rnd, ri, pick } from './util.js';
 import { mode, weather, rollWeather, WICON, bType, buildings, clock, SEASON, SEASONS, setSeason, fountain } from './world.js';
-import { people, clearGroups, leaveGroup, leave, sendToWork, coffeeRun, tidyUp, pinNotice, freePerson, INTENTS, bikeRide } from './people.js';
+import { people, clearGroups, leaveGroup, leave, sendToWork, coffeeRun, tidyUp, pinNotice, freePerson, INTENTS, bikeRide, startInquiry, endInquiry } from './people.js';
 import { geese, spawnGeese, flushGeese, startMenace } from './animals.js';
 import { bus, summonBus, burst, deliverMail, startReno, endReno, airDrop } from './town.js';
 
@@ -41,6 +41,8 @@ const HANDLERS = {
   check_fail: ev => { geese.check = ev.msg || 'tests'; if (geese.state === 'away') spawnGeese(true); startMenace(); setTimeout(flushGeese, 20000); },
   server_start: () => startReno(),
   server_stop: () => endReno(),
+  console_start: () => startInquiry(),
+  console_stop: () => endInquiry(),
   up_start: () => airDrop(ri(4, 7)),
   up_stop: () => {},
   // town

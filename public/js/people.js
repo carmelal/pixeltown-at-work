@@ -1,6 +1,6 @@
 import { rnd, ri, pick, hash, weighted } from './util.js';
 import { T, COLS, tileX, tileY, SKY, SEASON, hourNow, night, weather, wet, buildings, VISITS, isOpen, benches, docks, beds, notices,
-  FOUNTAIN_VIEWS, PLAZA, BUS_WAIT, walkable, walkTiles, pondSide, treeSpots, doorOf, bType, spotsAround, buildingAt, path, followRoute, mode } from './world.js';
+  FOUNTAIN_VIEWS, PLAZA, BUS_WAIT, BUS_STOP, walkable, walkTiles, pondSide, treeSpots, doorOf, bType, spotsAround, buildingAt, path, followRoute, mode, inquiry } from './world.js';
 import { nearestDog, ducks, geese } from './animals.js';
 import { bus, parcels, takeParcel } from './town.js';
 
@@ -117,6 +117,11 @@ export const INTENTS = {
     go: p => { const q = pick(parcels.filter(q => !q.chute && !q.claimed)); if (!q) return false; q.claimed = p; return send(p, 'parcel', q.tile, 'going to get a parcel', q); },
     arrive: p => { if (!parcels.includes(p.data)) return idle(p, 'too slow for the parcel', [1, 3], '😕'); takeParcel(p.data); idle(p, 'opening a parcel', [3, 6], pick(['📦', '🎁', '🧦', '📚'])); },
   },
+  inspect: {
+    w: 0,
+    go: p => { const [tile, what] = pick(CLUES); return send(p, 'inspect', tile, 'investigating something suspicious', what); },
+    arrive: p => { idle(p, 'investigating something suspicious', [4, 9], pick(['🔍', '🔍', '🤔', '🧐'])); p.flip = Math.random() < 0.5; },
+  },
   picnic: { w: 0, go: startPicnic, arrive: p => { p.act = 'sit'; p.desc = `having a picnic with ${p.data.with.name}`; p.wait = p.data.secs; p.snackT = rnd(2, 6); p.flip = p.x > p.data.blanket.x; } },
   home: { w: 0, arrive: p => enter(p, p.home, p.data?.secs ?? rnd(10, 40), p.data?.desc ?? (night() > 0.6 ? 'asleep at home' : 'at home')) },
   shelter: { w: 0, arrive: p => idle(p, 'sheltering under a tree', [8, 20], '☔️') },
@@ -125,6 +130,7 @@ export const INTENTS = {
   hide: { w: 0, arrive: (p, here) => here ? enter(p, here, 1e9, 'hiding from the geese') : idle(p, 'cowering', [3, 6], '😨') },
 };
 
+const CLUES = [...FOUNTAIN_VIEWS.map(t => [t, 'fountain']), ...benches.map(t => [t, 'bench']), ...beds.flatMap(b => bedSpots(b).map(t => [t, 'flowerbed'])), [[docks[0].c, docks[0].r], 'bike rack'], ...pondSide.map(t => [t, 'pond']), ...BUS_WAIT.map(t => [t, 'bus shelter']), [doorOf(bType('hall')[0]), 'notice board']];
 function sweepTo(p, tile, data) {
   const winter = SEASON === 'winter';
   if (!send(p, 'sweep', tile, winter ? 'shovelling the footpath' : 'sweeping the footpath', data)) return false;
@@ -219,6 +225,7 @@ const URGES = [
 ];
 
 function choose(p) {
+  if (p.detective) { if (inquiry.active && INTENTS.inspect.go(p) !== false) return; p.detective = false; idle(p, 'case closed', [2, 4], '📝'); return; }
   if (p.bike) { if (rideOn(p) !== false) return; p.bike = false; docks[0].bikes++; }
   if (geese.menace) { p.say = '😨'; p.wait = 2; return; }
   if (p.visitor && performance.now() > p.leaveAt && send(p, 'bus', pick(BUS_WAIT), 'heading for the bus home')) return;
@@ -267,6 +274,12 @@ export function bikeRide(n) {
   const free = people.filter(p => !p.inside && !p.bike && p.act === 'idle' && !p.visitor).sort(() => Math.random() - 0.5);
   for (const p of free.slice(0, Math.min(n, docks[0].bikes))) INTENTS.bike.go(p);
 }
+export function startInquiry() {
+  inquiry.active = true;
+  const free = people.filter(p => !p.inside && !p.bike && p.act === 'idle' && !p.visitor).sort(() => Math.random() - 0.5).slice(0, 3);
+  for (const p of free) { p.detective = true; if (p.group) leaveGroup(p); p.wait = rnd(0, 1.5); p.route = []; p.say = '🔍'; p.desc = 'on the case'; }
+}
+export function endInquiry() { inquiry.active = false; }
 export function tidyUp() {
   const free = people.filter(p => !p.inside && !p.bike && p.act === 'idle');
   const a = free.shift(), b = free.shift();
