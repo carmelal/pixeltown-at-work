@@ -62,14 +62,26 @@ const WICON = { clear: '☀️', cloudy: '☁️', rain: '🌧️', snow: '❄�
 const B = (type, c, r, w, hue = ri(0, 359)) => ({ type, c, r, w, h: 3, hue, lit: false, chimney: type === 'house' && Math.random() < 0.7 });
 const buildings = [
   // top row: one gap at col 15 connects the footpath to the back alley
-  B('office', 0, 3, 3), B('house', 3, 3, 2), B('house', 5, 3, 2), B('cafe', 7, 3, 3), B('house', 10, 3, 2), B('shop', 12, 3, 3),
-  B('house', 16, 3, 2), B('office', 18, 3, 4), B('house', 22, 3, 2), B('hall', 24, 3, 4), B('house', 28, 3, 2),
+  B('office', 0, 3, 3), B('bakery', 3, 3, 2), B('house', 5, 3, 2), B('cafe', 7, 3, 3), B('apartment', 10, 3, 2), B('shop', 12, 3, 3),
+  B('club', 16, 3, 2), B('office', 18, 3, 4), B('house', 22, 3, 2), B('hall', 24, 3, 4), B('clinic', 28, 3, 2),
   // middle row: solid on both sides of the plaza
-  B('house', 0, 7, 2), B('house', 2, 7, 2), B('shop', 4, 7, 3), B('house', 7, 7, 2), B('cafe', 21, 7, 3), B('house', 24, 7, 2), B('house', 26, 7, 2), B('house', 28, 7, 2),
+  B('house', 0, 7, 2), B('library', 2, 7, 3), B('apartment', 5, 7, 2), B('house', 7, 7, 2), B('cafe', 21, 7, 3), B('gym', 24, 7, 2), B('house', 26, 7, 2), B('house', 28, 7, 2),
   // bottom row: gaps at cols 7 and 18 lead down to the park
-  B('shop', 0, 11, 3), B('house', 3, 11, 2), B('house', 5, 11, 2), B('office', 8, 11, 3), B('house', 11, 11, 2), B('house', 13, 11, 2), B('shop', 15, 11, 3),
-  B('house', 19, 11, 2), B('house', 21, 11, 2), B('office', 23, 11, 3), B('house', 26, 11, 2), B('house', 28, 11, 2),
+  B('shop', 0, 11, 3), B('house', 3, 11, 2), B('museum', 5, 11, 2), B('office', 8, 11, 3), B('house', 11, 11, 2), B('apartment', 13, 11, 2), B('shop', 15, 11, 3),
+  B('house', 19, 11, 2), B('house', 21, 11, 2), B('office', 23, 11, 3), B('florist', 26, 11, 2), B('house', 28, 11, 2),
 ];
+// places people visit: how long they stay, what they are doing, what they come out with, and when the place is open
+const VISITS = {
+  bakery: { desc: 'buying bread', secs: [3, 7], out: ['🥐', '🥖', '🧁'], open: [7, 18] },
+  library: { desc: 'reading at the library', secs: [12, 30], out: ['📚', '📖', '🤓'], open: [9, 20] },
+  club: { desc: 'dancing at the club', secs: [15, 40], out: ['🕺', '💃', '🎶', '😵‍💫'], open: [21, 27] },
+  gym: { desc: 'working out', secs: [10, 25], out: ['💪', '😮‍💨', '🥵'], open: [6, 22] },
+  museum: { desc: 'looking at exhibits', secs: [8, 20], out: ['🖼️', '🦕', '🤔'], open: [10, 17] },
+  clinic: { desc: 'at the clinic', secs: [5, 12], out: ['🩹', '💊', '😷'], open: [8, 18] },
+  florist: { desc: 'picking out flowers', secs: [2, 5], out: ['💐', '🌷', '🌻'], open: [9, 18] },
+};
+const HEIGHTS = { house: 17, club: 16, bakery: 18, florist: 18, cafe: 20, shop: 20, gym: 20, clinic: 20, library: 22, museum: 22, hall: 26, office: 28, apartment: 30 };
+const isOpen = t => { const v = VISITS[t]; if (!v) return true; const h = hourNow(); return h >= v.open[0] && (h < v.open[1] || h + 24 < v.open[1]); };
 const fountain = { c: 14, r: 7 };                         // 2x2
 const pond = { c: 0, r: 15, w: 14, h: 2 };                       // bottom-left, bleeds off the left and bottom edges
 const benches = [[11, 8], [18, 8], [2, 14], [10, 14], [15, 15], [26, 14]];
@@ -114,7 +126,7 @@ const TOPICS = ['☕️', '🍕', '🐶', '🌧️', '💻', '🎮', '📺', '�
 const NAMES = ['ada', 'bo', 'cy', 'dot', 'eli', 'fay', 'gus', 'hal', 'ivy', 'jo', 'kit', 'lou', 'mo', 'nan', 'oz', 'pip'];
 const people = [];
 function addPerson(name) {
-  const h = hash(name), home = bType('house')[h % bType('house').length], [c, r] = doorOf(home);
+  const homes = buildings.filter(b => b.type === 'house' || b.type === 'apartment'), h = hash(name), home = homes[h % homes.length], [c, r] = doorOf(home);
   const p = { name, home, c, r, x: c * T + 4, y: r * T + 4, route: [], act: 'idle', say: '', wait: rnd(0, 3), inside: null,
     shirt: `hsl(${h % 360} 55% 50%)`, hair: pick(['#2b1b0e', '#5a3b1e', '#d8b060', '#1a1a1a', '#8a2a2a', '#eee']), hat: h % 4 === 0, umbrella: h % 3 !== 0,
     frame: 0, flip: false, desc: 'standing around' };
@@ -155,6 +167,7 @@ function choose(p) {
   if (roll < 0.75 && pondSide.length) return goTo(p, pick(pondSide), 'walk', 'going to feed the ducks');
   if (roll < 0.79) { const dog = nearestDog(p); const spots = spotsAround(dog.c, dog.r); if (spots.length) return goTo(p, pick(spots), 'walk', 'going to pet the dog'); }
   if (roll < 0.83 && bus.riders.length < 4) return goTo(p, pick(BUS_WAIT), 'walk', 'going to catch the bus');
+  if (roll < 0.80) { const open = Object.keys(VISITS).filter(isOpen); const t = pick(open); const b = t && pick(bType(t)); if (b) { p.visit = t; return goTo(p, doorOf(b), 'walk', `going to the ${t}`); } }
   if (roll < 0.845 && SEASON !== 'winter' && pondSide.length) return goTo(p, pick(pondSide), 'walk', 'going fishing');
   if (roll < 0.875) { const d = pick(docks.filter(d => d.bikes > 0)); if (d) return goTo(p, [d.c, d.r], 'walk', 'going to grab a bike'); }
   if (roll < 0.93) {
@@ -173,6 +186,8 @@ function arrived(p) {
   if (here && /work/.test(p.desc)) return enter(p, here, rnd(15, 40), 'at work');
   if (here && /errand/.test(p.desc)) return enter(p, here, rnd(3, 8), 'shopping');
   if (here && /hall/.test(p.desc)) return enter(p, here, rnd(4, 10), 'inside town hall');
+  if (here && p.visit && here.type === p.visit) { const v = VISITS[p.visit]; p.visit = null; return enter(p, here, rnd(...v.secs), v.desc); }
+  p.visit = null;
   if (/sit/.test(p.desc)) { p.act = 'sit'; p.desc = 'sitting on a bench'; p.wait = rnd(8, 20); return; }
   if (/fishing/.test(p.desc)) { p.act = 'fish'; p.desc = 'fishing'; p.wait = rnd(15, 35); p.fishT = rnd(3, 8); p.flip = false; return; }
   const dock = docks.find(d => d.c === p.c && d.r === p.r);
@@ -205,7 +220,7 @@ function leaveGroup(p) {
 function clearGroups() { for (const p of people) { p.group = null; p.joining = null; } groups.length = 0; }
 function leave(p) {
   const b = p.inside; p.inside = null; if (b.lit !== undefined && !people.some(o => o.inside === b)) b.lit = false;
-  p.say = b.type === 'cafe' ? '☕️' : b.type === 'shop' ? '🛍️' : b.type === 'office' ? pick(['💻', '😮‍💨', '📎']) : b.type === 'hall' ? '📜' : ''; p.act = 'idle'; p.desc = 'just stepped outside'; p.wait = rnd(1, 3);
+  p.say = VISITS[b.type] ? pick(VISITS[b.type].out) : b.type === 'cafe' ? '☕️' : b.type === 'shop' ? '🛍️' : b.type === 'office' ? pick(['💻', '😮‍💨', '📎']) : b.type === 'hall' ? '📜' : ''; p.act = 'idle'; p.desc = 'just stepped outside'; p.wait = rnd(1, 3);
 }
 function tick(p, dt) {
   p.frame += dt;
@@ -461,8 +476,9 @@ const px = (x, y, c, w = 1, h = 1) => { ctx.fillStyle = c; ctx.fillRect(Math.rou
 const shade = (l, n) => Math.max(8, l - 28 * n);
 const rgbn = ([r, g, b], n, k = 0.55) => `rgb(${r * (1 - k * n)},${g * (1 - k * n)},${b * (1 - k * n)})`;
 function drawBuilding(b, n, now) {
-  const x = b.c * T, y = b.r * T, w = b.w * T, h = b.h * T;
-  const wall = { house: `hsl(${b.hue} 35% ${shade(58, n)}%)`, cafe: `hsl(25 45% ${shade(50, n)}%)`, shop: `hsl(${b.hue} 40% ${shade(62, n)}%)`, office: `hsl(215 15% ${shade(50, n)}%)`, hall: `hsl(40 30% ${shade(68, n)}%)` }[b.type];
+  const h = (HEIGHTS[b.type] || 24) + (b.type === 'house' ? (b.hue % 3) : 0), x = b.c * T, y = (b.r + b.h) * T - h, w = b.w * T;
+  const wall = { house: `hsl(${b.hue} 35% ${shade(58, n)}%)`, cafe: `hsl(25 45% ${shade(50, n)}%)`, shop: `hsl(${b.hue} 40% ${shade(62, n)}%)`, office: `hsl(215 15% ${shade(50, n)}%)`, hall: `hsl(40 30% ${shade(68, n)}%)`,
+    bakery: `hsl(35 60% ${shade(72, n)}%)`, library: `hsl(15 35% ${shade(42, n)}%)`, club: `hsl(270 20% ${shade(22, n)}%)`, gym: `hsl(200 25% ${shade(55, n)}%)`, museum: `hsl(45 20% ${shade(75, n)}%)`, clinic: `hsl(0 0% ${shade(88, n)}%)`, florist: `hsl(140 30% ${shade(60, n)}%)`, apartment: `hsl(${b.hue} 12% ${shade(52, n)}%)` }[b.type];
   px(x, y + 3, wall, w, h - 3);
   const roof = PAL.snow ? `rgb(${225 - 90 * n},${228 - 90 * n},${235 - 90 * n})` : b.type === 'office' ? `hsl(215 15% ${shade(30, n)}%)` : `hsl(${(b.hue + 160) % 360} 40% ${shade(32, n)}%)`;
   px(x, y, roof, w, 4);
@@ -474,9 +490,23 @@ function drawBuilding(b, n, now) {
   }
   if (b.type === 'cafe') { px(x + 1, y + 6, '#c33', w - 2, 2); for (let i = 1; i < w - 2; i += 2) px(x + i, y + 8, '#eee', 1, 1); }
   if (b.type === 'shop') for (let i = 0; i < w; i += 2) px(x + i, y + 6, i % 4 ? '#eee' : `hsl(${b.hue} 70% 45%)`, 2, 2);
+  if (b.type === 'bakery') { for (let i = 0; i < w; i += 2) px(x + i, y + 6, i % 4 ? '#fff' : '#e8a', 2, 2); px(x + 2, y + 10, '#c84', 3, 2); px(x + w - 5, y + 10, '#c84', 3, 2); }   // awning and loaves in the window
+  if (b.type === 'club') {                                                                 // the one place allowed to flash: lights cycle only while it is open at night
+    const open = isOpen('club'), hue = (now / 6) % 360;
+    px(x + 1, y + 5, open ? `hsl(${hue} 90% 60%)` : '#3a3344', w - 2, 1);                                                   // sign strip
+    for (let i = 2; i < w - 2; i += 4) px(x + i, y + 8, open ? `hsl(${(hue + i * 40 + Math.floor(now / 250) * 90) % 360} 90% ${55 + 15 * Math.sin(now / 90 + i)}%)` : '#1a1626', 2, 2);   // windows
+    if (open && Math.floor(now / 700) % 2 === 0) label('🎶', x + w / 2, y - 4 - (now / 300) % 3, '#fff', 4.5, 'center', false);
+  }
+  if (b.type === 'library') { for (let i = 1; i < w - 1; i += 4) px(x + i, y + 6, `hsl(15 20% ${shade(70, n)}%)`, 2, h - 8); px(x + w / 2 - 3, y + 7, '#c9a', 2, 1); px(x + w / 2 + 1, y + 7, '#9ac', 2, 1); }   // columns and book spines
+  if (b.type === 'museum') { px(x, y + 3, `hsl(45 20% ${shade(55, n)}%)`, w, 2); px(x + 1, y + 6, `hsl(45 20% ${shade(90, n)}%)`, 2, h - 9); px(x + w - 3, y + 6, `hsl(45 20% ${shade(90, n)}%)`, 2, h - 9); px(x + w / 2 - 2, y + 5, '#c33', 4, 3); }   // pediment, columns, banner
+  if (b.type === 'clinic') { px(x + w / 2 - 3, y + 5, '#fff', 6, 5); px(x + w / 2 - 2, y + 5, '#d33', 1, 5); px(x + w / 2 + 1, y + 5, '#d33', 1, 5); px(x + w / 2 - 1, y + 7, '#d33', 2, 1); }   // red H on white
+  if (b.type === 'gym') { px(x + 1, y + 6, '#9fd8ff', w - 2, 5); px(x + 3, y + 8, '#333', w - 6, 1); px(x + 2, y + 7, '#333', 1, 3); px(x + w - 3, y + 7, '#333', 1, 3); }   // big window with a barbell inside
+  if (b.type === 'florist') { for (let i = 1; i < w - 1; i += 2) px(x + i, y + h - 3, ['#f7a', '#fd6', '#f55', '#fff'][(b.c * 7 + i * 3) % 4], 1, 1); px(x + 1, y + h - 2, '#6b4a2a', w - 2, 1); px(x, y + 6, '#fff', w, 1); }   // flower boxes out front
+  if (b.type === 'apartment') { px(x, y + 3, `hsl(${b.hue} 12% ${shade(40, n)}%)`, w, 1); }
   const win = b.lit && (n > 0.3 || mode === 'incident' || wet()) ? '#ffe28a' : n > 0.3 ? '#1a1c28' : '#a8dcff';
-  if (b.type === 'office') { for (let i = 2; i < w - 1; i += 3) for (let j = 6; j < h - 4; j += 4) px(x + i, y + j, win, 2, 2); }
-  else for (let i = 2; i < w - 2; i += 4) px(x + i, y + 10, win, 2, 2);
+  if (b.type === 'office' || b.type === 'apartment') { for (let i = 2; i < w - 1; i += 3) for (let j = 6; j < h - 4; j += 4) px(x + i, y + j, win, 2, 2); }
+  else if (b.type === 'gym' || b.type === 'clinic' || b.type === 'museum' || b.type === 'club') { /* styled above */ }
+  else for (let i = 2; i < w - 2; i += 4) px(x + i, y + Math.max(7, h - 11), win, 2, 2);
   px(x + w / 2 - 1, y + h - 5, '#2a1a0e', 3, 5);                                     // door
   if (b.type === 'house' && b.hue % 2 === 0) px(x + w / 2 + 3, y + h - 3, `hsl(${b.hue} 50% 40%)`, 1, 3);  // mailbox post
 }
@@ -597,7 +627,7 @@ function draw(now) {
   const asphalt = `rgb(${84 - 38 * n},${86 - 38 * n},${92 - 38 * n})`;
   ctx.fillStyle = asphalt; ctx.beginPath(); ctx.moveTo(LANE.c * T, H); ctx.quadraticCurveTo(LANE.c * T, LANE.r * T, LANE.c * T + 16, LANE.r * T); ctx.lineTo(W, LANE.r * T); ctx.lineTo(W, H); ctx.closePath(); ctx.fill();   // lane curving up from the bottom
   ctx.strokeStyle = `rgb(${150 - 60 * n},${150 - 60 * n},${150 - 60 * n})`; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(LANE.c * T + 0.5, H); ctx.quadraticCurveTo(LANE.c * T + 0.5, LANE.r * T + 0.5, LANE.c * T + 16, LANE.r * T + 0.5); ctx.lineTo(W, LANE.r * T + 0.5); ctx.stroke();   // kerb line
-  for (const [c, r] of flowers) if (SEASON !== 'winter') for (let i = 0; i < 3; i++) px(c * T + 1 + i * 3, r * T + 3 + (i % 2) * 2, SEASON === 'spring' ? pick(['#f7a', '#fd6', '#fff']) : SEASON === 'summer' ? '#e44' : '#c84', 1, 1);
+  for (const [c, r] of flowers) if (SEASON !== 'winter') for (let i = 0; i < 3; i++) px(c * T + 1 + i * 3, r * T + 3 + (i % 2) * 2, SEASON === 'spring' ? ['#f7a', '#fd6', '#fff'][(c * 5 + i) % 3] : SEASON === 'summer' ? '#e44' : '#c84', 1, 1);
   px(fountain.c * T + 1, fountain.r * T + 1, '#889', 14, 14); px(fountain.c * T + 3, fountain.r * T + 3, PAL.snow ? '#cde' : '#5ac', 10, 10);
   if (!PAL.snow) px(fountain.c * T + 7, fountain.r * T + 3 + Math.round(Math.sin(now / 90)), '#cff', 2, 4);
   for (const [c, r] of benches) { px(c * T + 1, r * T + 4, '#6b4a2a', 6, 2); px(c * T + 1, r * T + 6, '#4a3018', 1, 1); px(c * T + 6, r * T + 6, '#4a3018', 1, 1); }
