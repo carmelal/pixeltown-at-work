@@ -1,6 +1,6 @@
 // how everything looks. Each draw function takes the entity (and night level n / time now where needed) and paints with px().
 import { clamp, hash, lerp } from './util.js';
-import { T, W, H, SKY, SEASON, PAL, weather, wet, hourNow, nowDate, HEIGHTS, isOpen, pond, fountain, benches, beds, LANE, BUS_STOP, BUS_WAIT, mode } from './world.js';
+import { T, W, H, SKY, SEASON, PAL, weather, wet, hourNow, nowDate, HEIGHTS, isOpen, pond, fountain, benches, beds, notices, LANE, BUS_STOP, BUS_WAIT, mode, reno } from './world.js';
 import { ctx, px, shade, rgbn, grey, label, bubble, blit } from './canvas.js';
 import { geese } from './animals.js';
 
@@ -18,6 +18,7 @@ const FACADE = {
     px(x + w / 2 - 3, y - 7, roof, 6, 7); px(x + w / 2 - 2, y - 6, '#f4f4ee', 4, 4);
     const hr = (hourNow() % 12) / 12 * Math.PI * 2, mn = (nowDate().getMinutes() / 60) * Math.PI * 2, cx = x + w / 2, cy = y - 4;
     px(cx - 0.5 + Math.sin(hr), cy - 0.5 - Math.cos(hr), '#222'); px(cx - 0.5 + Math.sin(mn) * 1.6, cy - 0.5 - Math.cos(mn) * 1.6, '#222');
+    for (let i = 0; i < Math.min(notices.length, 6); i++) { const nx = x + 2 + (i % 3) * 5, ny = y + h - 13 + Math.floor(i / 3) * 5; px(nx, ny, '#f8f6ee', 4, 4); px(nx + 1, ny + 1, '#889', 2, 1); px(nx + 1, ny + 2, '#889', 2, 1); px(nx + 1, ny, '#d33', 1, 1); }   // pinned notices
   },
   cafe(x, y, w) { px(x + 1, y + 6, '#c33', w - 2, 2); for (let i = 1; i < w - 2; i += 2) px(x + i, y + 8, '#eee', 1, 1); },
   shop(x, y, w, h, n, now, roof, b) { for (let i = 0; i < w; i += 2) px(x + i, y + 6, i % 4 ? '#eee' : `hsl(${b.hue} 70% 45%)`, 2, 2); },
@@ -48,6 +49,12 @@ export function drawBuilding(b, n, now) {
   if (GRID_WINDOWS.has(b.type)) { for (let i = 2; i < w - 1; i += 3) for (let j = 6; j < h - 4; j += 4) px(x + i, y + j, win, 2, 2); }
   else if (!NO_WINDOWS.has(b.type)) for (let i = 2; i < w - 2; i += 4) px(x + i, y + Math.max(7, h - 11), win, 2, 2);
   px(x + w / 2 - 1, y + h - 5, '#2a1a0e', 3, 5);                                     // door
+  if (reno.site === b && reno.scaffold > 0) {                                        // green scaffolding, built up from the ground as materials arrive
+    const pole = '#2f8f4e', plank = '#c9a060', top = y + h - Math.round((h + 3) * reno.scaffold);
+    px(x - 1, top, pole, 1, y + h - top); px(x + w, top, pole, 1, y + h - top); if (w > 16) px(x + w / 2, top, pole, 1, y + h - top);
+    for (let j = y + h - 4; j >= top + 1; j -= 6) { px(x - 1, j, pole, w + 2, 1); px(x - 2, j - 1, plank, Math.min(w + 4, 9), 1); }
+    if (reno.scaffold >= 1) px(x - 1, y - 3, plank, w + 2, 1);
+  }
 }
 
 // ---------- people ----------
@@ -72,8 +79,10 @@ export function drawPerson(p, now) {
     const bob = Math.round(Math.sin(now / 500)); px(x + 7, yy - 1, 'rgba(200,220,255,0.6)', 1, 10 + bob); px(x + 7, yy + 9 + bob, '#e33', 1, 1);   // line and float
   }
   else if (p.act === 'sit') blit(PERSON.sit, x, yy, pal);
+  else if (p.act === 'work') blit(Math.floor(p.frame * 4) % 2 ? PERSON.step : PERSON.stand, x, yy - 1, pal);
   else blit(step ? PERSON.step : PERSON.stand, x, yy - 1, pal);
-  if (p.hat || (SEASON === 'winter' && hash(p.name) % 2)) px(x - 1, yy - 2, p.hatColor || (SEASON === 'winter' ? p.shirt : '#333'), 5, 1);
+  if (p.hardhat) { px(x - 1, yy - 2, '#f5c400', 5, 1); px(x, yy - 3, '#f5c400', 3, 1); }   // hard hat
+  else if (p.hat || (SEASON === 'winter' && hash(p.name) % 2)) px(x - 1, yy - 2, p.hatColor || (SEASON === 'winter' ? p.shirt : '#333'), 5, 1);
   if (p.pkg) { px(x - 2, yy - 7, '#b8863b', 7, 5); px(x - 2, yy - 5, '#d9a65a', 7, 1); px(x + 1, yy - 7, '#d9a65a', 1, 5); }   // big parcel carried overhead
   bubble(p.say, x + 1.5, yy - 4, 5);
 }
@@ -145,6 +154,18 @@ export function drawTree(c, r, n) {
   if (SEASON === 'spring') { px(x, y - 6, '#f9c', 1, 1); px(x + 5, y - 8, '#f9c', 1, 1); px(x + 8, y - 3, '#f9c', 1, 1); px(x + 2, y - 2, '#fff', 1, 1); }
   if (SEASON === 'autumn') { px(x + 1, y - 4, '#d44', 1, 1); px(x + 7, y - 7, '#e83', 1, 1); px(x + 4, y - 3, '#fb4', 1, 1); }
 }
+export function drawPile(tile, n) {
+  if (!tile || n <= 0) return; const x = tile[0] * T, y = tile[1] * T;
+  for (let i = 0; i < Math.min(n, 8); i++) px(x + (i % 4) * 2, y + 6 - Math.floor(i / 4) * 2, i % 2 ? '#c9a060' : '#a66', 2, 2);
+}
+export function drawTruck(v, n) {
+  if (v.state === 'away') return;
+  const x = Math.round(v.x), y = Math.round(v.y) - v.h, f = v.flip ? -1 : 1, cab = v.flip ? x : x + v.w - 6;   // flatbed with a cab, load (and crew) on the back until unloaded
+  px(x, y + 5, '#555', v.w, 2); px(cab, y + 1, '#e8701a', 6, 6); px(v.flip ? x + 1 : x + v.w - 3, y + 2, n > 0.5 ? '#ffe28a' : '#9fd8ff', 2, 2);
+  const bed = v.flip ? x + 7 : x + 1;
+  if (v.loaded) { for (let i = 0; i < 6; i++) px(bed + (i % 3) * 3, y + 3 - Math.floor(i / 3) * 2, i % 2 ? '#c9a060' : '#a66', 3, 2); for (let i = 0; i < 4; i++) px(bed + 1 + i * 3, y - 2, '#f5c400', 2, 1); }   // hard hats peeking over the load
+  px(x + 1, y + v.h - 2, '#444', 3, 2); px(x + v.w - 5, y + v.h - 2, '#444', 3, 2);
+}
 export function drawBlanket(b) {                                                 // red and white check with a basket
   const x = Math.round(b.x) - 6, y = Math.round(b.y) - 2;
   for (let i = 0; i < 12; i++) for (let j = 0; j < 5; j++) px(x + i, y + j, ((i >> 1) + (j >> 1)) % 2 ? '#e44' : '#fff', 1, 1);   // 2x2 checks
@@ -172,17 +193,18 @@ export function drawShelter(n) {                                                
 }
 export function drawBus(bus, n) {
   if (bus.state === 'away') return;
+  const body = bus.visitorRun ? '#2a9d8f' : '#e8b020', trim = bus.visitorRun ? '#1f7a70' : '#c8901a';
   if (bus.state === 'rising') {                                                 // seen from behind as it climbs out of the bottom edge
     const x = Math.round(bus.x) + 2, y = Math.round(bus.y) - 14;
-    px(x, y, '#e8b020', 12, 14); px(x + 1, y + 1, '#9fd8ff', 10, 4); px(x + 1, y + 11, '#d33', 2, 2); px(x + 9, y + 11, '#d33', 2, 2); px(x + 4, y + 7, '#222', 4, 3);
+    px(x, y, body, 12, 14); px(x + 1, y + 1, '#9fd8ff', 10, 4); px(x + 1, y + 11, '#d33', 2, 2); px(x + 9, y + 11, '#d33', 2, 2); px(x + 4, y + 7, '#222', 4, 3);
     px(x, y + 14, '#222', 3, 1); px(x + 9, y + 14, '#222', 3, 1); return;
   }
   const x = Math.round(bus.x), y = Math.round(bus.y) - bus.h;                  // side view
-  px(x, y, '#e8b020', bus.w, bus.h - 2); px(x, y, '#c8901a', bus.w, 1);
+  px(x, y, body, bus.w, bus.h - 2); px(x, y, trim, bus.w, 1); if (bus.visitorRun) px(x + 1, y + 6, '#f4f4f4', bus.w - 2, 1);
   for (let i = 0; i < 4; i++) px(x + 2 + i * 5, y + 2, n > 0.5 ? '#ffe28a' : '#9fd8ff', 3, 3);
   px(x + bus.w - 3, y + 2, '#9fd8ff', 2, 3);                                     // windscreen
   px(x + 1, y + bus.h - 2, '#444', 4, 2); px(x + bus.w - 6, y + bus.h - 2, '#444', 4, 2); px(x + 2, y + bus.h - 2, '#999', 2, 1); px(x + bus.w - 5, y + bus.h - 2, '#999', 2, 1);   // wheels
-  px(x + 10, y + 2, bus.state === 'stopped' ? '#2a1a0e' : '#c8901a', 3, 6);     // door (open when stopped)
+  px(x + 10, y + 2, bus.state === 'stopped' ? '#2a1a0e' : trim, 3, 6);     // door (open when stopped)
   if (n > 0.5) px(x + bus.w - 1, y + 5, '#ffe', 1, 1);
 }
 
@@ -231,13 +253,14 @@ export function drawGround(n, now) {
 const BLOOMS = { spring: ['#f7a', '#fd6', '#fff', '#c9f'], summer: ['#e44', '#f80', '#fd3', '#f5a'], autumn: ['#c84', '#a63', '#e93', '#875'], winter: [] };
 function drawBed(b, n) {
   const x = b.c * T, y = b.r * T, w = b.w * T;
-  const watered = performance.now() < b.wateredUntil, soil = watered ? 0.7 : 1;
+  const watered = performance.now() < b.wateredUntil, soil = watered ? 0.7 : 1, picked = performance.now() < b.pickedUntil;
   px(x, y, grey(150, n), w, T); px(x + 1, y + 1, `rgb(${(74 - 30 * n) * soil},${(50 - 20 * n) * soil},${(32 - 12 * n) * soil})`, w - 2, T - 2);     // border and soil (darker when wet)
   if (PAL.snow) { px(x + 1, y + 1, `rgb(${225 - 70 * n},${228 - 70 * n},${235 - 70 * n})`, w - 2, 2); for (let i = 1; i < w - 1; i += 3) if ((b.c + i) % 2) px(x + i, y + 4 + (i % 2), '#a6d', 1, 1); return; }   // winter: crocuses poking through
   const cols = BLOOMS[SEASON], stem = `rgb(${40 - 15 * n},${110 - 50 * n},${50 - 20 * n})`;
   for (let i = 1; i < w - 1; i += 2) {
     const back = (i >> 1) % 2 === 0, fy = y + (back ? 2 : 4), col = cols[(b.c * 7 + i * 3) % cols.length];
-    px(x + i, fy + 1, stem, 1, back ? 3 : 2); px(x + i, fy, col, 1, 1);
+    px(x + i, fy + 1, stem, 1, back ? 3 : 2); if (picked && (i >> 1) % 3 !== 1) continue;   // most blooms gone for a while after picking
+    px(x + i, fy, col, 1, 1);
     if (watered) px(x + i + (i % 2 ? 1 : -1), fy, col, 1, 1);                                                  // fuller blooms for a while after watering
     if (SEASON === 'spring' && i % 3 === 0) px(x + i, fy - 1, '#fff', 1, 1);
   }

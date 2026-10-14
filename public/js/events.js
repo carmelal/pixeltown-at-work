@@ -5,7 +5,8 @@ import { people, clearGroups, leaveGroup, leave, send, sendToWork } from './peop
 import { geese, spawnGeese, flushGeese, startMenace } from './animals.js';
 import { bus, summonBus, burst, deliverMail } from './town.js';
 import { ri } from './util.js';
-import { coffeeRun, tidyUp } from './people.js';
+import { coffeeRun, tidyUp, pinNotice, freePerson, INTENTS } from './people.js';
+import { startReno, endReno } from './town.js';
 import { buildings } from './world.js';
 
 export function say() {}                                        // banners are gone; the dev status line is the only readout
@@ -22,7 +23,12 @@ const HANDLERS = {
   merge: () => summonBus(ri(3, 5)),                                                       // a busload of visitors arrives
   checkout: ev => { react(['🔀'], 0.4); say('🔀 ' + (ev.msg || 'checkout')); },
   pull: () => deliverMail(pick(buildings)),                                               // one big package for somebody
-  rebase: () => tidyUp(),                                                                 // sweeping and watering (shovelling in winter)
+  rebase: () => tidyUp(),
+  new: ev => pinNotice((ev.msg || '').split(': ').pop()),
+  stash: () => { const p = freePerson(); if (p) INTENTS.pickflowers.go(p); },
+  server_start: () => startReno(),
+  server_stop: () => endReno(),
+  stash_pop: () => { const p = freePerson(); if (p) INTENTS.picnic.go(p); },                                                                 // sweeping and watering (shovelling in winter)
   reset: (ev, msg) => { react(['😬'], 0.3); say('⏪ reset' + msg); },
   editing: ev => {                                               // light an office and send a few idle people to it
     // about half of everyone outside heads for an office (spread across all of them), unless mid-ride or already at work
@@ -46,12 +52,11 @@ const HANDLERS = {
 };
 
 let statusEl = null, connected = false, lastSignal = '';
-const ICON = { editing: '✏️', idle: '☕️', commit: '✅️', push: '🚀', merge: '🤝', checkout: '🔀', pull: '📥', rebase: '🔄', reset: '⏪' };
 function showStatus() { if (statusEl) statusEl.textContent = `${connected ? '●' : '○'} ${lastSignal || (connected ? 'connected, waiting for signals' : 'reconnecting')}`; }
 
 export function onEvent(ev) {
   const msg = ev.msg ? `: ${ev.msg}` : '';
-  if (ev.type !== 'hello') { const t = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); const repo = (ev.msg || '').split(/[:→]/)[0].trim(); lastSignal = `${ICON[ev.type] || '·'} ${ev.type}${repo ? ' ' + repo : ''} (${t})`; showStatus(); }
+  if (ev.type !== 'hello') { const t = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); const repo = (ev.msg || '').split(/[:→]/)[0].trim(); lastSignal = `${ev.type.replace('_', ' ')}${repo ? ' · ' + repo : ''} (${t})`; showStatus(); }
   const h = HANDLERS[ev.type];
   if (h) return h(ev, msg);
   const p = pick(people.filter(p => !p.inside)) || people[0]; p.say = '❓️'; p.wait = Math.max(p.wait, 3); say(ev.type + msg);

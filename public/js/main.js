@@ -1,9 +1,9 @@
 // wiring: the frame loop, draw order, hover tooltips, dev bar
-import { T, W, H, SKY, SEASON, southern, night, weather, WICON, nowDate, clock, seasonOverridden, buildings, trees, docks, lamps, pond, LANE, BUS_STOP, mode, cursor } from './world.js';
+import { T, W, H, SKY, SEASON, southern, night, weather, WICON, nowDate, clock, seasonOverridden, notices, reno, buildings, trees, docks, lamps, pond, LANE, BUS_STOP, mode, cursor } from './world.js';
 import { cv, ctx, hi, hctx, fitOverlay, label } from './canvas.js';
-import { people, tickPerson, picnics, tickPicnics } from './people.js';
+import { people, tickPerson, picnics, tickPicnics, tickNotices } from './people.js';
 import { dogs, tickDog, ducks, tickDucks, squirrels, tickSquirrel, geese, tickGeese, geeseOnGround } from './animals.js';
-import { bus, tickBus, tickAmbient, particles, birds, van, carrier, tickMail } from './town.js';
+import { bus, tickBus, tickAmbient, particles, birds, van, carrier, tickMail, truck, tickTruck, workers } from './town.js';
 import { onEvent, connect } from './events.js';
 import * as draw from './sprites.js';
 
@@ -12,6 +12,7 @@ const tip = document.getElementById('tip'), bar = document.getElementById('bar')
 if (params.get('dev') !== 'true') bar.classList.add('hidden');
 bar.querySelectorAll('[data-ev]').forEach(el => el.onclick = () => { fetch('/event?type=' + el.dataset.ev + (el.dataset.msg ? '&msg=' + el.dataset.msg : '')); el.closest('details')?.removeAttribute('open'); });
 document.addEventListener('click', e => { if (!bar.contains(e.target)) bar.querySelectorAll('details[open]').forEach(d => d.removeAttribute('open')); });
+bar.querySelectorAll('details').forEach(d => d.addEventListener('toggle', () => { if (d.open) bar.querySelectorAll('details[open]').forEach(o => { if (o !== d) o.removeAttribute('open'); }); }));
 connect(document.getElementById('conn'));
 
 // ---------- frame ----------
@@ -19,10 +20,10 @@ let last = performance.now();
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
   if ((mode.current === 'gathering' || mode.current === 'nap') && now > mode.until) onEvent({ type: 'wake' });
-  for (const p of people) tickPerson(p, dt); tickPicnics();
+  for (const p of people) tickPerson(p, dt); tickPicnics(); tickNotices();
   for (const d of dogs) tickDog(d, dt);
   for (const q of squirrels) tickSquirrel(q, dt);
-  tickGeese(dt); tickDucks(dt); tickBus(dt); tickMail(dt); tickAmbient(dt);
+  tickGeese(dt); tickDucks(dt); tickBus(dt); tickMail(dt); tickTruck(dt); tickAmbient(dt);
   render(now);
   requestAnimationFrame(frame);
 }
@@ -44,7 +45,10 @@ function render(now) {
     ...ducks.filter(d => !(d.air && d.air.phase === 'gone')).map(d => ({ y: d.air ? FRONT : d.y, f: () => draw.drawDuck(d, now) })),
     { y: bus.state === 'rising' ? H + 1 : bus.y + 1, f: () => draw.drawBus(bus, n) },
     { y: van.state === 'rising' ? H + 2 : van.y + 1, f: () => draw.drawVan(van, n) },
+    { y: truck.y + 1, f: () => draw.drawTruck(truck, n) },
+    ...(reno.pileTile ? [{ y: reno.pileTile[1] * T + 7, f: () => draw.drawPile(reno.pileTile, reno.pile) }] : []),
     ...(carrier.active ? [{ y: carrier.y, f: () => draw.drawPerson(carrier, now) }] : []),
+    ...workers.map(w => ({ y: w.y, f: () => draw.drawPerson(w, now) })),
     ...trees.map(([c, r]) => ({ y: r * T + 6, f: () => draw.drawTree(c, r, n) })),
     ...docks.map(d => ({ y: d.r * T + 2, f: () => draw.drawDock(d) })),
     ...picnics.map(b => ({ y: b.y - 3, f: () => draw.drawBlanket(b) })),
@@ -64,6 +68,7 @@ function hitTargets() {
   for (const p of people) if (!p.inside) t.push({ x: p.x, y: p.y + 2, r: 5, text: `${p.name}${p.visitor ? ' (visiting)' : ''} — ${p.desc}` });
   for (const d of dogs) t.push({ x: d.x, y: d.y, r: 5, text: `${d.name} (${d.temperament}) — ${d.desc}` });
   if (carrier.active) t.push({ x: carrier.x, y: carrier.y + 2, r: 5, text: `mail carrier — ${carrier.desc}` });
+  for (const w of workers) t.push({ x: w.x, y: w.y + 2, r: 5, text: `${w.name} (crew) — ${w.desc}` });
   if (geese.state !== 'away') for (const g of geese.birds) t.push({ x: g.x, y: g.y, r: 5, text: `canada goose — ${geese.menace ? `${geese.check} failed; on the warpath` : geese.state === 'landed' ? `waiting on ${geese.check || 'the checks'}` : geese.state === 'leaving' ? 'leaving in a huff' : 'flying in'}` });
   for (const q of squirrels) if (!q.hidden) t.push({ x: q.x, y: q.y, r: 4, text: 'squirrel — making a run for it' });
   for (const d of ducks) if (!(d.air && d.air.phase === 'gone')) t.push({ x: d.x, y: d.y, r: 4, text: `duck — ${d.air ? 'flying' : d.scared > 0 ? 'fleeing a dog' : d.lure ? 'coming for bread' : 'paddling'}` });
@@ -71,12 +76,14 @@ function hitTargets() {
   return t;
 }
 function areaText(mx, my) {
-  if (bus.state !== 'away' && mx >= bus.x && mx < bus.x + bus.w && my >= bus.y - 14 && my < bus.y + 1) return `bus — ${bus.riders.length ? 'carrying ' + bus.riders.map(p => p.name).join(', ') : 'empty'}`;
+  if (bus.state !== 'away' && mx >= bus.x && mx < bus.x + bus.w && my >= bus.y - 14 && my < bus.y + 1) return `${bus.visitorRun ? 'coach' : 'bus'} — ${bus.incoming ? `bringing ${bus.incoming} visitors` : bus.riders.length ? 'carrying ' + bus.riders.map(p => p.name).join(', ') : 'empty'}`;
   if (van.state !== 'away' && mx >= van.x && mx < van.x + van.w && my >= van.y - 12 && my < van.y + 1) return `mail van — ${van.state === 'parked' ? 'waiting for the carrier' : van.state === 'leaving' ? 'off with the outgoing mail' : 'arriving'}`;
+  if (truck.state !== 'away' && mx >= truck.x && mx < truck.x + truck.w && my >= truck.y - 12 && my < truck.y + 1) return `truck — ${truck.state === 'dumping' ? 'unloading' : truck.state === 'parked' ? 'parked at the site' : truck.loaded ? 'bringing the crew' : 'heading off'}`;
+  if (reno.pileTile && reno.pile > 0 && Math.hypot(reno.pileTile[0] * T + 4 - mx, reno.pileTile[1] * T + 4 - my) < 6) return `materials — ${reno.pile} left`;
   if (my >= LANE.r * T && mx >= LANE.c * T) return 'bus lane';
   if (my >= pond.r * T && mx < pond.w * T) return 'pond';
   const b = buildings.find(b => mx >= b.c * T && mx < (b.c + b.w) * T && my >= b.r * T && my < (b.r + b.h) * T);
-  if (b) { const ins = people.filter(q => q.inside === b).map(q => q.name); return `${b.type}${ins.length ? ' — inside: ' + ins.join(', ') : ''}`; }
+  if (b) { const ins = people.filter(q => q.inside === b).map(q => q.name); const extra = b.type === 'hall' && notices.length ? ` — notices: ${notices.map(n => n.text).join(', ')}` : ''; return `${b.type}${ins.length ? ' — inside: ' + ins.join(', ') : ''}${extra}`; }
   if (my < SKY * T) return `${SEASON}, ${weather.type}${southern ? ' (southern hemisphere)' : ''}`;
   return null;
 }

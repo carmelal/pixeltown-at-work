@@ -41,6 +41,8 @@ export const WICON = { clear: '☀️', cloudy: '☁️', rain: '🌧️', snow:
 // ---------- global mood (set by events) ----------
 export const mode = { current: 'normal', until: 0 };     // normal | gathering | nap
 export const cursor = { x: 0, y: 0, active: false };
+export const reno = { active: false, site: null, pile: 0, pileTile: null, scaffold: 0 };   // scaffold 0..1 goes up as the crew carries materials over   // while `dev server` runs, a crew renovates one building
+export const siteSpots = b => { const out = []; for (let c = b.c - 1; c <= b.c + b.w; c++) if (walkable(c, b.r + b.h)) out.push([c, b.r + b.h]); return out; };
 
 // ---------- map ----------
 // type, col, row, width (tiles); every footprint is 3 tiles tall, facades vary (HEIGHTS)
@@ -68,13 +70,14 @@ export const VISITS = {
 };
 export const isOpen = t => { const v = VISITS[t]; if (!v) return true; const h = hourNow(); return h >= v.open[0] && (h < v.open[1] || h + 24 < v.open[1]); };
 
-export const fountain = { c: 14, r: 7, sprayUntil: 0 };                                // 2x2
+export const fountain = { c: 14, r: 7, sprayUntil: 0 };
+export const notices = [];                                              // pinned on the town hall: { text, at }                                // 2x2
 export const pond = { c: 0, r: 15, w: 14, h: 2 };                       // bottom-left, bleeds off the left and bottom edges
 export const benches = [[11, 8], [18, 8], [2, 14], [10, 14], [15, 15], [26, 14]];
 export const trees = [[14, 15], [16, 15], [17, 15], [16, 8], [12, 7], [10, 7], [19, 7], [4, 2], [9, 2], [21, 2], [27, 2]];   // bank, plaza, back alley (alley trees split it into pockets; only reachable pockets get used)
 export const docks = [{ c: 9, r: 8, bikes: 4 }];   // bikeshare rack on the plaza
 export const lamps = [[1, 6], [8, 6], [15, 6], [22, 6], [29, 6], [4, 10], [11, 10], [18, 10], [25, 10]];
-export const beds = [{ c: 9, r: 9, w: 3 }, { c: 18, r: 9, w: 3 }, { c: 9, r: 7, w: 1 }, { c: 20, r: 7, w: 1 }].map(b => ({ ...b, wateredUntil: 0 }));   // plaza flowerbeds (one tile tall, not walkable)
+export const beds = [{ c: 9, r: 9, w: 3 }, { c: 18, r: 9, w: 3 }, { c: 9, r: 7, w: 1 }, { c: 20, r: 7, w: 1 }].map(b => ({ ...b, wateredUntil: 0, pickedUntil: 0 }));   // plaza flowerbeds (one tile tall, not walkable)
 export const PLAZA = { c0: 9, c1: 20, r0: 7, r1: 9 };
 export const FOUNTAIN_VIEWS = [[13, 9], [16, 9], [13, 6], [16, 6]];
 export const LANE = { c: 18, r: 15 };                                   // bus lane: rows 15-16 from col 18 to the right edge, entering from the bottom

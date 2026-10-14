@@ -1,6 +1,6 @@
 // townspeople: state, intents (what they set out to do), arrivals (what happens when they get there), chat groups
 import { rnd, ri, pick, hash, weighted } from './util.js';
-import { T, COLS, tileX, tileY, SKY, SEASON, hourNow, night, weather, wet, buildings, VISITS, isOpen, benches, docks, beds, FOUNTAIN_VIEWS, PLAZA, BUS_WAIT,
+import { T, COLS, tileX, tileY, SKY, SEASON, hourNow, night, weather, wet, buildings, VISITS, isOpen, benches, docks, beds, notices, FOUNTAIN_VIEWS, PLAZA, BUS_WAIT,
   walkable, walkTiles, pondSide, treeSpots, doorOf, bType, spotsAround, buildingAt, path, followRoute, mode } from './world.js';
 import { dogs, nearestDog, ducks, geese } from './animals.js';
 import { bus } from './town.js';
@@ -64,9 +64,15 @@ export const INTENTS = {
   bike:     { w: 3,  go: p => { const d = pick(docks.filter(d => d.bikes > 0)); return !!d && send(p, 'bike', [d.c, d.r], 'going to grab a bike'); }, arrive: bikeArrive },
   water:    { w: 0,  go: p => { const b = pick(beds.filter(b => performance.now() > b.wateredUntil)); if (!b) return false; const s = bedSpots(b); return s.length && send(p, 'water', pick(s), 'going to water the flowers', b); },
               arrive: p => { const b = p.data; p.act = 'idle'; p.desc = 'watering the flowers'; p.say = '🪣'; p.wait = rnd(4, 8); p.flip = p.x > (b.c + b.w / 2) * T; b.wateredUntil = performance.now() + 90000; } },
+  notice:   { w: 0,  go: p => toDoor(p, 'notice', 'hall', 'going to pin up a notice'),
+              arrive: p => { idle(p, 'pinning up a notice', [2, 4], '📌'); notices.push({ text: p.data, at: performance.now() }); } },
+  unpin:    { w: 0,  go: p => toDoor(p, 'unpin', 'hall', 'going to take down an old notice'),
+              arrive: p => { idle(p, 'taking down an old notice', [2, 4], '🗑️'); notices.shift(); } },
+  pickflowers: { w: 0, go: p => { const b = pick(beds.filter(b => performance.now() > b.pickedUntil)); if (!b) return false; const s = bedSpots(b); return s.length && send(p, 'pickflowers', pick(s), 'going to pick some flowers', b); },
+              arrive: p => { const b = p.data; idle(p, 'picking flowers', [3, 6], '💐'); p.flip = p.x > (b.c + b.w / 2) * T; b.pickedUntil = performance.now() + 120000; } },
   sweep:    { w: 0,  go: p => { const r = pick([6, 10]); return send(p, 'sweep', [0, r], SEASON === 'winter' ? 'going to shovel the footpath' : 'going to sweep the footpath', { row: r, passes: 2 }) && (p.say = SEASON === 'winter' ? '🪏' : '🧹', true); },
               arrive: p => { const d = p.data; if (d.passes > 0) { d.passes--; const end = p.c === 0 ? COLS - 1 : 0; if (send(p, 'sweep', [end, d.row], SEASON === 'winter' ? 'shovelling the footpath' : 'sweeping the footpath', d)) { p.say = SEASON === 'winter' ? '🪏' : '🧹'; p.data = d; return; } } idle(p, 'done tidying', [2, 4], '😮‍💨'); } },
-  picnic:   { w: 3.5, when: () => !wet() && night() < 0.5, go: startPicnic, arrive: p => { p.act = 'sit'; p.desc = `having a picnic with ${p.data.with.name}`; p.wait = p.data.secs; p.snackT = rnd(2, 6); p.flip = p.x > p.data.blanket.x; } },
+  picnic:   { w: 0,  go: startPicnic, arrive: p => { p.act = 'sit'; p.desc = `having a picnic with ${p.data.with.name}`; p.wait = p.data.secs; p.snackT = rnd(2, 6); p.flip = p.x > p.data.blanket.x; } },
   chat:     { w: 5.5, go: startChat,                                                                           arrive: joinChat },
   hall:     { w: 7,  go: p => toDoor(p, 'hall', 'hall', 'visiting town hall'),                               arrive: (p, here) => enter(p, here, [4, 10], 'inside town hall') },
   // intents that are only ever set directly (routine, weather, events, other actors)
@@ -118,7 +124,8 @@ const URGES = [
 
 export function choose(p) {
   if (p.bike) { if (rideOn(p) === false) { p.bike = false; docks[0].bikes++; } else return; }   // mid-ride: keep riding (bike teleports home if stuck)
-  if (geese.menace) { p.say = '😨'; p.wait = 2; return; }                                  // nobody goes out while the geese are on the warpath
+  if (geese.menace) { p.say = '😨'; p.wait = 2; return; }
+  if (p.hardhat && reno.active) { if (reno.pile > 0 && Math.random() < 0.7 && INTENTS.haul.go(p) !== false) return; if (INTENTS.build.go(p) !== false) return; }                                  // nobody goes out while the geese are on the warpath
   if (p.visitor && performance.now() > p.leaveAt) { if (send(p, 'bus', pick(BUS_WAIT), 'heading for the bus home')) return; }
   if (p.urge === 'break') { p.urge = null; const ok = Math.random() < 0.65 ? INTENTS.chat.go(p) : INTENTS.ducks.go(p); if (ok !== false) { p.desc = p.desc.replace('going', 'on a break, going'); return; } }
   if (mode.current === 'gathering') { const t = [Math.floor(rnd(PLAZA.c0 + 1, PLAZA.c1)), Math.floor(rnd(PLAZA.r0 + 1, PLAZA.r1 + 1))]; if (walkable(...t)) send(p, 'gather', t, 'heading to the gathering'); p.wait = rnd(1, 3); return; }
@@ -179,7 +186,10 @@ export function leave(p) {
 }
 
 // ---------- per-frame ----------
+export function tickNotices() { if (notices.length && performance.now() - notices[0].at > 15 * 60000 && !people.some(p => p.intent === 'unpin')) { const p = freePerson(); if (p) INTENTS.unpin.go(p); } }
 export function tickPicnics() { for (let i = picnics.length - 1; i >= 0; i--) if (performance.now() > picnics[i].until) picnics.splice(i, 1); }
+export function pinNotice(text) { const p = pick(people.filter(p => !p.inside && !p.bike && p.act === 'idle')) || pick(people.filter(p => !p.inside && !p.bike)); if (!p) return; p.route = []; p.data = text; if (send(p, 'notice', doorOf(pick(bType('hall'))), 'going to pin up a notice', text) === false) notices.push({ text, at: performance.now() }); }
+export function freePerson() { return pick(people.filter(p => !p.inside && !p.bike && p.act === 'idle')); }
 export function tidyUp() {                                                      // rebase: one sweeps (or shovels), another waters the beds (not in winter)
   const free = people.filter(p => !p.inside && !p.bike && p.act === 'idle');
   const a = free.shift(); if (a) INTENTS.sweep.go(a);

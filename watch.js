@@ -27,9 +27,32 @@ export function startWatching(roots, emit) {
     if (repos.has(repoRoot)) return;
     const logFile = headLog(repoRoot);
     if (!logFile || !fs.existsSync(logFile)) return;
-    const repo = { name: path.basename(repoRoot), logFile, lastTs: lastEntry(logFile)?.ts ?? 0, editTimer: null, lastEditEmit: 0, idleTimer: null };
+    const gitDir = path.dirname(path.dirname(logFile));
+    const repo = { name: path.basename(repoRoot), logFile, gitDir, lastTs: lastEntry(logFile)?.ts ?? 0, editTimer: null, lastEditEmit: 0, idleTimer: null, heads: listHeads(gitDir), stashN: stashCount(gitDir) };
     repos.set(repoRoot, repo);
     fs.watchFile(logFile, { interval: 1500 }, () => onGitLog(repo));
+    fs.watchFile(path.join(gitDir, "logs", "refs", "stash"), { interval: 1500 }, () => onStash(repo));
+    try { fs.watch(path.join(gitDir, "refs", "heads"), { recursive: true }, () => onHeads(repo)); } catch {}
+  }
+
+  // new branches: diff the set of files under refs/heads (branches created by checkout -b / switch -c / branch)
+  function listHeads(gitDir) {
+    const out = new Set(), base = path.join(gitDir, "refs", "heads");
+    const walk = dir => { for (const d of fs.readdirSync(dir, { withFileTypes: true })) d.isDirectory() ? walk(path.join(dir, d.name)) : out.add(path.relative(base, path.join(dir, d.name))); };
+    try { walk(base); } catch {}
+    return out;
+  }
+  function onHeads(repo) {
+    const now = listHeads(repo.gitDir);
+    for (const h of now) if (!repo.heads.has(h) && !h.endsWith(".lock")) emit({ type: "new", msg: `${repo.name}: ${h}` });
+    repo.heads = now;
+  }
+  // stashes: the stash reflog gains a line on `git stash`, loses one on pop/drop
+  function stashCount(gitDir) { try { return fs.readFileSync(path.join(gitDir, "logs", "refs", "stash"), "utf8").trimEnd().split("\n").filter(Boolean).length; } catch { return 0; } }
+  function onStash(repo) {
+    const n = stashCount(repo.gitDir);
+    if (n > repo.stashN) emit({ type: "stash", msg: repo.name }); else if (n < repo.stashN) emit({ type: "stash_pop", msg: repo.name });
+    repo.stashN = n;
   }
 
   function lastEntry(logFile) {
