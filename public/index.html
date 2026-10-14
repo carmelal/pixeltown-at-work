@@ -6,18 +6,28 @@
 <style>
   html, body { margin: 0; height: 100%; background: #0b0c10; color: #c8ccd4; font: 12px/1.4 ui-monospace, Menlo, monospace; overflow: hidden; }
   body { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; }
-  canvas { image-rendering: pixelated; width: min(98vw, calc(94vh * 240 / 136)); aspect-ratio: 240 / 136; cursor: crosshair; }
+  #stage { position: relative; width: min(98vw, calc(94vh * 240 / 136)); aspect-ratio: 240 / 136; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #c { image-rendering: pixelated; cursor: crosshair; }
+  #hi { pointer-events: none; }
+  #bar.hidden { display: none; }
   #tip { position: fixed; pointer-events: none; background: #14161d; border: 1px solid #2a2e3a; padding: 3px 6px; display: none; white-space: nowrap; }
   #bar { opacity: .55; display: flex; gap: 14px; }
   #bar span:hover { opacity: 1; cursor: pointer; }
 </style>
 </head>
 <body>
-<canvas id="c" width="240" height="136"></canvas>
+<div id="stage"><canvas id="c" width="240" height="136"></canvas><canvas id="hi"></canvas></div>
 <div id="bar"><span data-ev="commit">commit</span><span data-ev="push">push</span><span data-ev="incident">incident</span><span data-ev="allclear">all clear</span><span data-ev="party">party</span><span data-ev="nap">nap</span><span id="conn">…</span></div>
 <div id="tip"></div>
 <script>
 const cv = document.getElementById('c'), ctx = cv.getContext('2d'), tip = document.getElementById('tip');
+const hi = document.getElementById('hi'), hctx = hi.getContext('2d');   // crisp overlay for text/bubbles
+const params = new URLSearchParams(location.search);
+if (params.get('dev') !== 'true') document.getElementById('bar').classList.add('hidden');
+let S = 1;                                                                 // overlay pixels per world pixel
+function fitOverlay() { const r = cv.getBoundingClientRect(), d = devicePixelRatio || 1; hi.width = Math.round(r.width * d); hi.height = Math.round(r.height * d); S = hi.width / 240; }
+addEventListener('resize', fitOverlay);
 const T = 8, COLS = 30, ROWS = 17, W = COLS * T, H = ROWS * T;
 const rnd = (a, b) => a + Math.random() * (b - a), ri = (a, b) => Math.floor(rnd(a, b + 1)), pick = a => a[ri(0, a.length - 1)];
 const hash = s => { let h = 2166136261; for (const ch of s) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; };
@@ -64,6 +74,8 @@ function path(from, to) {                                    // BFS on tiles
 }
 
 // ---------- people ----------
+const PANIC = ['😱', '😨', '😰'];
+const TOPICS = ['☕', '🍕', '🐶', '☔', '💻', '🎮', '📺', '🚲', '🏠', '😂', '🤔', '💸', '🎂', '🚗', '📚', '🧦'];
 const NAMES = ['ada', 'bo', 'cy', 'dot', 'eli', 'fay', 'gus', 'hal', 'ivy', 'jo', 'kit', 'lou', 'mo', 'nan', 'oz', 'pip'];
 const people = [];
 function addPerson(name, isYou = false) {
@@ -72,7 +84,7 @@ function addPerson(name, isYou = false) {
     shirt: `hsl(${h % 360} 55% 50%)`, hair: pick(['#2b1b0e', '#5a3b1e', '#d8b060', '#1a1a1a', '#8a2a2a', '#eee']), hat: h % 4 === 0, frame: 0, flip: false, desc: 'standing around' };
   people.push(p); return p;
 }
-const you = addPerson(new URLSearchParams(location.search).get('name') || 'you', true);
+const you = addPerson(params.get('name') || 'you', true);
 NAMES.forEach(n => addPerson(n));
 
 // ---------- activities ----------
@@ -84,9 +96,9 @@ function goTo(p, tile, act, desc, say = '') {
 }
 function enter(p, b, secs, desc) { p.inside = b; b.lit = true; p.wait = secs; p.desc = desc; p.act = 'inside'; }
 function choose(p) {
-  if (mode === 'incident') { const d = doorOf(p.home); if (p.c === d[0] && p.r === d[1]) return enter(p, p.home, 1e9, 'hiding at home'); return goTo(p, d, 'run', 'running home', '!'); }
-  if (mode === 'party') { const t = [ri(10, 19), ri(8, 9)]; if (walkable(...t)) goTo(p, t, 'walk', 'heading to the party', '♪'); p.wait = rnd(1, 3); return; }
-  if (mode === 'nap') { p.act = 'idle'; p.desc = 'napping'; p.say = 'z'; p.wait = 5; return; }
+  if (mode === 'incident') { const d = doorOf(p.home); if (p.c === d[0] && p.r === d[1]) return enter(p, p.home, 1e9, 'hiding at home'); return goTo(p, d, 'run', 'running home', pick(PANIC)); }
+  if (mode === 'party') { const t = [ri(10, 19), ri(8, 9)]; if (walkable(...t)) goTo(p, t, 'walk', 'heading to the party'); p.wait = rnd(1, 3); return; }
+  if (mode === 'nap') { p.act = 'idle'; p.desc = 'napping'; p.say = '💤'; p.wait = 5; return; }
   const n = night(), roll = Math.random();
   if (n > 0.6 && roll < 0.6) { const d = doorOf(p.home); return (p.c === d[0] && p.r === d[1]) ? enter(p, p.home, rnd(20, 60), 'asleep at home') : goTo(p, d, 'walk', 'heading home'); }
   if (roll < 0.22) return goTo(p, pick(walkTiles), 'walk', 'out for a walk');
@@ -94,25 +106,27 @@ function choose(p) {
   if (roll < 0.52) { const b = pick(bType('office')); return goTo(p, doorOf(b), 'walk', 'going to work'); }
   if (roll < 0.62) { const b = pick(bType('shop')); return goTo(p, doorOf(b), 'walk', 'running an errand'); }
   if (roll < 0.74) return goTo(p, pick(benches), 'walk', 'going to sit down');
-  if (roll < 0.82) return goTo(p, pick([[13, 9], [16, 9], [13, 6], [16, 6]]), 'walk', 'going to look at the fountain');
-  if (roll < 0.9) { const q = pick(people.filter(o => o !== p && o.act === 'idle' && !o.inside)); if (q) { q.wait = 8; q.desc = `chatting with ${p.name}`; q.say = '…'; p.chat = q; return goTo(p, [q.c, q.r + (walkable(q.c, q.r + 1) ? 1 : -1)], 'walk', `going to chat with ${q.name}`); } }
+  if (roll < 0.78) return goTo(p, pick([[13, 9], [16, 9], [13, 6], [16, 6]]), 'walk', 'going to look at the fountain');
+  if (roll < 0.82) { const [c, r] = pick(trees); const spots = [[c, r + 1], [c - 1, r], [c + 1, r]].filter(t => walkable(...t)); if (spots.length) return goTo(p, pick(spots), 'walk', 'going to look at a tree'); }
+  if (roll < 0.85) return goTo(p, pick(walkTiles.filter(([, r]) => r === 6)), 'walk', 'going to look at the sky');
+  if (roll < 0.9) { const q = pick(people.filter(o => o !== p && o.act === 'idle' && !o.inside)); if (q) { q.wait = 8; q.desc = `chatting with ${p.name}`; q.say = pick(TOPICS); p.chat = q; return goTo(p, [q.c, q.r + (walkable(q.c, q.r + 1) ? 1 : -1)], 'walk', `going to chat with ${q.name}`); } }
   return goTo(p, doorOf(pick(bType('hall'))), 'walk', 'visiting town hall');
 }
 function arrived(p) {
   const here = buildings.find(b => { const d = doorOf(b); return d[0] === p.c && d[1] === p.r; });
   if (p.act === 'run') return enter(p, p.home, 1e9, 'hiding at home');
-  if (p.chat) { p.say = '…'; p.desc = `chatting with ${p.chat.name}`; p.chat = null; p.wait = 8; p.act = 'idle'; return; }
+  if (p.chat) { p.say = pick(TOPICS); p.desc = `chatting with ${p.chat.name}`; p.chat = null; p.wait = 8; p.act = 'idle'; return; }
   if (here && /coffee/.test(p.desc)) return enter(p, here, rnd(3, 6), 'inside the cafe');
   if (here && /work/.test(p.desc)) return enter(p, here, rnd(15, 40), 'at work');
   if (here && /errand/.test(p.desc)) return enter(p, here, rnd(3, 8), 'shopping');
   if (here && /hall/.test(p.desc)) return enter(p, here, rnd(4, 10), 'inside town hall');
   if (/sit/.test(p.desc)) { p.act = 'sit'; p.desc = 'sitting on a bench'; p.wait = rnd(8, 20); return; }
-  if (/fountain/.test(p.desc)) { p.desc = 'looking at the fountain'; p.say = '~'; p.wait = rnd(4, 8); p.act = 'idle'; return; }
+  if (/look at/.test(p.desc)) { p.desc = p.desc.replace('going to look at', 'looking at'); p.say = '👀'; p.wait = rnd(4, 8); p.act = 'idle'; return; }
   p.act = 'idle'; p.desc = 'standing around'; p.wait = rnd(1, 5);
 }
 function leave(p) {
   const b = p.inside; p.inside = null; if (!people.some(o => o.inside === b)) b.lit = false;
-  p.say = b.type === 'cafe' ? '☕' : b.type === 'shop' ? '▣' : ''; p.act = 'idle'; p.desc = 'just stepped outside'; p.wait = rnd(1, 3);
+  p.say = b.type === 'cafe' ? '☕' : b.type === 'shop' ? '🎁' : b.type === 'office' ? pick(['💻', '😮', '📎']) : b.type === 'hall' ? '📜' : ''; p.act = 'idle'; p.desc = 'just stepped outside'; p.wait = rnd(1, 3);
 }
 function tick(p, dt) {
   p.frame += dt;
@@ -137,14 +151,14 @@ function onEvent(ev) {
   const msg = ev.msg ? `: ${ev.msg}` : '';
   switch (ev.type) {
     case 'hello': return;
-    case 'incident': mode = 'incident'; for (const p of people) { p.route = []; p.wait = rnd(0.5, 3); p.act = 'idle'; p.say = '!'; p.desc = 'panicking'; } return say('🔥 incident' + msg, 1e9);
+    case 'incident': mode = 'incident'; for (const p of people) { p.route = []; p.wait = rnd(0.5, 3); p.act = 'idle'; p.say = pick(PANIC); p.desc = 'panicking'; } return say('🔥 incident' + msg, 1e9);
     case 'allclear': mode = 'normal'; for (const p of people) { p.wait = rnd(0, 3); if (p.inside) p.wait = rnd(1, 6); } return say('✅ all clear' + msg);
-    case 'commit': for (const p of people) if (!p.inside) { p.say = '✓'; p.wait = Math.max(p.wait, 2); } burst(12); return say('✓ commit' + msg);
-    case 'push': burst(60); for (const p of people) if (!p.inside) { p.say = '★'; p.wait = Math.max(p.wait, 3); } return say('★ pushed' + msg);
+    case 'commit': for (const p of people) if (!p.inside) { p.say = pick(['✅', '👏', '🎉']); p.wait = Math.max(p.wait, 2); } burst(12); return say('✅ commit' + msg);
+    case 'push': burst(60); for (const p of people) if (!p.inside) { p.say = pick(['🚀', '🎊', '🙌']); p.wait = Math.max(p.wait, 3); } return say('🚀 pushed' + msg);
     case 'party': mode = 'party'; modeUntil = performance.now() + 25000; for (const p of people) { if (p.inside) leave(p); p.route = []; p.wait = rnd(0, 2); } return say('♪ party' + msg);
     case 'nap': mode = 'nap'; modeUntil = performance.now() + 20000; for (const p of people) { p.route = []; p.wait = 0; } return say('z nap time' + msg);
     case 'wake': mode = 'normal'; for (const p of people) p.wait = rnd(0, 2); return say('wake up' + msg);
-    default: you.say = '?'; you.wait = Math.max(you.wait, 3); return say(ev.type + msg);
+    default: you.say = '❓'; you.wait = Math.max(you.wait, 3); return say(ev.type + msg);
   }
 }
 function burst(n) { for (let i = 0; i < n; i++) confetti.push({ x: fountain.c * T + 8, y: fountain.r * T, vx: rnd(-40, 40), vy: rnd(-90, -30), c: `hsl(${ri(0, 359)} 80% 60%)`, t: rnd(1.5, 3) }); }
@@ -164,7 +178,7 @@ function drawBuilding(b, n, now) {
   const x = b.c * T, y = b.r * T, w = b.w * T, h = b.h * T;
   const wall = { house: `hsl(${b.hue} 35% ${shade(58, n)}%)`, cafe: `hsl(25 45% ${shade(50, n)}%)`, shop: `hsl(${b.hue} 40% ${shade(62, n)}%)`, office: `hsl(215 15% ${shade(50, n)}%)`, hall: `hsl(40 30% ${shade(68, n)}%)` }[b.type];
   px(x, y + 3, wall, w, h - 3);
-  const roof = mode === 'incident' && Math.sin(now / 150) > 0 ? '#ff3b3b' : b.type === 'office' ? `hsl(215 15% ${shade(30, n)}%)` : `hsl(${(b.hue + 160) % 360} 40% ${shade(32, n)}%)`;
+  const roof = b.type === 'office' ? `hsl(215 15% ${shade(30, n)}%)` : `hsl(${(b.hue + 160) % 360} 40% ${shade(32, n)}%)`;
   px(x, y, roof, w, 4);
   if (b.type === 'hall') { px(x + w / 2 - 2, y - 4, roof, 4, 4); px(x + w / 2 - 1, y - 3, '#fff', 2, 2); }
   if (b.type === 'cafe') { px(x + 1, y + 6, '#c33', w - 2, 2); for (let i = 1; i < w - 2; i += 2) px(x + i, y + 8, '#eee', 1, 1); }
@@ -183,11 +197,12 @@ function drawPerson(p, now) {
   else { px(x + (step ? 0 : 1), yy + 5, '#223', 1, 1); px(x + (step ? 2 : 1), yy + 5, '#223', 1, 1); px(x, yy + 2, p.shirt, 3, 3); px(x, yy, '#f1c9a5', 3, 2); px(x, yy - 1, p.hair, 3, 1); }
   if (p.hat) px(x - 1, yy - 2, '#333', 5, 1);
   if (p.isYou) px(x + 1, yy - 5 + Math.round(Math.sin(now / 200)), '#fff', 1, 2);
-  if (p.say) { ctx.fillStyle = p.say === '!' ? '#ff5' : '#fff'; ctx.font = '6px monospace'; ctx.fillText(p.say, x + 3, yy - 2); }
+  if (p.say) label(p.say, x + 1.5, yy - 4, '#fff', 5, 'center', false);
 }
 function draw(now) {
   const n = night();
-  ctx.fillStyle = mode === 'incident' ? `rgb(${70 + 40 * Math.sin(now / 120)},18,28)` : `rgb(${120 - 105 * n},${175 - 150 * n},${225 - 170 * n})`;
+  hctx.clearRect(0, 0, hi.width, hi.height);
+  ctx.fillStyle = mode === 'incident' ? `rgb(${95 - 50 * n},${40 - 20 * n},${50 - 25 * n})` : `rgb(${120 - 105 * n},${175 - 150 * n},${225 - 170 * n})`;
   ctx.fillRect(0, 0, W, 3 * T);
   if (n > 0.5) for (let i = 0; i < 25; i++) px((i * 97) % W, (i * 53) % 20, '#ddd');
   px(W - 22, 6, n > 0.5 ? '#f0f0e0' : '#ffd34d', 6, 6);
@@ -203,7 +218,14 @@ function draw(now) {
   drawables.sort((a, b) => a.y - b.y).forEach(d => d.f());
   for (const f of confetti) px(f.x, f.y, f.c);
   if (n > 0) { ctx.fillStyle = `rgba(10,12,40,${0.45 * n})`; ctx.fillRect(0, 0, W, H); }
-  if (now < tickerUntil) { ctx.fillStyle = '#000a'; ctx.fillRect(0, H - 9, W, 9); ctx.fillStyle = '#fff'; ctx.font = '7px monospace'; ctx.fillText(ticker.slice(0, 55), 2, H - 2); }
+  if (mode === 'incident') { ctx.fillStyle = 'rgba(120,20,30,0.18)'; ctx.fillRect(0, 0, W, H); }
+  if (now < tickerUntil) { ctx.fillStyle = '#000a'; ctx.fillRect(0, H - 9, W, 9); label(ticker.slice(0, 70), 2, H - 4.5, '#fff', 6, 'left'); }
+}
+// text drawn on the crisp overlay; (x, y) are world coordinates, size in world pixels
+function label(text, x, y, color, size = 6, align = 'center', outline = true) {
+  hctx.font = `${Math.round(size * S)}px ui-monospace, Menlo, 'Apple Color Emoji', 'Segoe UI Emoji', monospace`; hctx.textAlign = align; hctx.textBaseline = 'middle';
+  if (outline) { hctx.lineWidth = Math.max(1, S * 0.9); hctx.strokeStyle = 'rgba(0,0,0,0.75)'; hctx.strokeText(text, x * S, y * S); }
+  hctx.fillStyle = color; hctx.fillText(text, x * S, y * S);
 }
 
 // ---------- loop ----------
@@ -215,6 +237,7 @@ function loop(now) {
   for (let i = confetti.length - 1; i >= 0; i--) { const f = confetti[i]; f.vy += 120 * dt; f.x += f.vx * dt; f.y += f.vy * dt; if ((f.t -= dt) < 0) confetti.splice(i, 1); }
   draw(now); requestAnimationFrame(loop);
 }
+fitOverlay();
 requestAnimationFrame(loop);
 
 // ---------- hover ----------
