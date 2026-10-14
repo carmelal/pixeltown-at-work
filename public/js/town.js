@@ -1,10 +1,10 @@
 // the bus, ambient life (birds, weather particles, leaves, smoke) and confetti
 import { rnd, ri, pick, hash } from './util.js';
 import { T, W, H, SKY, SEASON, night, wet, weather, rollWeather, buildings, trees, fountain, LANE, BUS_STOP, tileX, tileY, doorOf, path, followRoute } from './world.js';
-import { people, leaveGroup } from './people.js';
+import { people, leaveGroup, addVisitor } from './people.js';
 
 // ---------- bus: climbs out of the bottom edge at the lane's curve, turns right, stops under the shelter, leaves to the right ----------
-export const bus = { type: 'bus', x: LANE.c * T, y: H + 30, state: 'away', timer: rnd(20, 50), riders: [], stopX: 21 * T - 4, laneY: LANE.r * T + 8, w: 24, h: 10 };
+export const bus = { type: 'bus', x: LANE.c * T, y: H + 30, state: 'away', timer: rnd(20, 50), riders: [], incoming: 0, stopX: 21 * T - 4, laneY: LANE.r * T + 8, w: 24, h: 10 };
 export function tickBus(dt) {
   bus.timer -= dt;
   if (bus.state === 'away' && bus.timer <= 0) { bus.state = 'rising'; bus.x = LANE.c * T; bus.y = H + 30; }
@@ -14,11 +14,16 @@ export function tickBus(dt) {
   if (bus.state === 'leaving') { bus.x += 50 * dt; if (bus.x > W + 10) { bus.state = 'away'; bus.timer = rnd(60, 120); } }
 }
 function stopBus() {
-  for (const p of bus.riders) { p.inside = null; [p.c, p.r] = BUS_STOP; p.x = tileX(p.c); p.y = tileY(p.r); p.act = 'idle'; p.desc = 'just got off the bus'; p.say = pick(['😮‍💨', '🧳', '']); p.wait = rnd(1, 4); }
+  for (const p of bus.riders) {
+    if (p.visitor) { people.splice(people.indexOf(p), 1); continue; }                      // visitors ride away for good
+    p.inside = null; [p.c, p.r] = BUS_STOP; p.x = tileX(p.c); p.y = tileY(p.r); p.act = 'idle'; p.desc = 'just got off the bus'; p.say = pick(['😮‍💨', '🧳', '']); p.wait = rnd(1, 4);
+  }
   bus.riders = [];
+  for (let i = 0; i < bus.incoming; i++) { const v = addVisitor(); [v.c, v.r] = BUS_STOP; v.x = tileX(v.c) + rnd(-2, 2); v.y = tileY(v.r); v.say = pick(['🧳', '👋', '📸']); v.wait = rnd(1, 4); }
+  bus.incoming = 0;
   for (const p of people) if (p.desc === 'waiting for the bus' && !p.inside) { bus.riders.push(p); p.inside = bus; p.desc = 'riding the bus'; p.act = 'inside'; p.wait = 1e9; p.say = ''; if (p.group) leaveGroup(p); }
 }
-export function summonBus() { if (bus.state === 'away') bus.timer = 0; }
+export function summonBus(withVisitors = 0) { bus.incoming += withVisitors; if (bus.state === 'away') bus.timer = 0; }
 
 // ---------- mail: on a push, a van parks on the lane and the carrier walks the whole town, then drives off with the outgoing mail ----------
 const VAN_X = 11 * T + 4, CARRIER_HOME = [19, 14];

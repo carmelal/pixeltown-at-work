@@ -1,9 +1,10 @@
 // events from the server (and the dev bar) and how the town reacts to them
 import { rnd, pick } from './util.js';
-import { mode, weather, rollWeather, WICON, bType, doorOf, walkTiles, clock, SEASON, SEASONS, setSeason } from './world.js';
+import { mode, weather, rollWeather, WICON, bType, doorOf, walkTiles, clock, SEASON, SEASONS, setSeason, fountain } from './world.js';
 import { people, clearGroups, leaveGroup, leave, send, sendToWork } from './people.js';
 import { geese, spawnGeese } from './animals.js';
 import { bus, summonBus, burst, deliverMail } from './town.js';
+import { ri } from './util.js';
 import { coffeeRun } from './people.js';
 
 export function say() {}                                        // banners are gone; the dev status line is the only readout
@@ -15,9 +16,9 @@ function setMode(m, secs) { mode.current = m; mode.until = performance.now() + s
 
 const HANDLERS = {
   hello: () => {},
-  commit: (ev, msg) => { react(['✅️', '👏', '🎉']); burst(12); say('✅️ commit' + msg); },
+  commit: () => { fountain.sprayUntil = performance.now() + 5000; burst(16); },          // the fountain celebrates
   push: () => { deliverMail(); react(['👋'], 0.3); },
-  merge: (ev, msg) => { react(['🤝'], 0.5); burst(20); say('🤝 merged' + msg); },
+  merge: () => summonBus(ri(3, 5)),                                                       // a busload of visitors arrives
   checkout: ev => { react(['🔀'], 0.4); say('🔀 ' + (ev.msg || 'checkout')); },
   pull: (ev, msg) => { react(['📥'], 0.4); say('📥 pulled' + msg); },
   rebase: (ev, msg) => { react(['🔄'], 0.3); say('🔄 rebased' + msg); },

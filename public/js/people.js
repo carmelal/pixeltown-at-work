@@ -18,6 +18,12 @@ function addPerson(name) {
   people.push(p); return p;
 }
 NAMES.forEach(addPerson);
+const VISITOR_NAMES = ['quinn', 'rae', 'sol', 'tam', 'uma', 'vic', 'wren', 'xan', 'yas', 'zed', 'ash', 'blu', 'cass', 'dev', 'em', 'fin'];
+let visitorN = 0;
+export function addVisitor() {                                               // off the bus; wanders for a while, then catches a bus out
+  const v = addPerson(VISITOR_NAMES[visitorN++ % VISITOR_NAMES.length]);
+  v.visitor = true; v.leaveAt = performance.now() + rnd(90, 200) * 1000; v.desc = 'just arrived'; v.shirt = `hsl(${hash(v.name) % 360} 70% 62%)`; return v;
+}
 
 // ---------- primitives ----------
 export function idle(p, desc, secs = [1, 5], say = '') { p.act = 'idle'; p.desc = desc; p.wait = rnd(...secs); p.say = say; }
@@ -27,7 +33,7 @@ export function send(p, intent, tile, desc, data = null) {
   const pth = path([p.c, p.r], tile); if (!pth) return false;
   p.route = pth; p.act = 'walk'; p.intent = intent; p.data = data; p.desc = desc; p.say = ''; return true;
 }
-export function goHome(p, secs, desc) { const d = doorOf(p.home); return (p.c === d[0] && p.r === d[1]) ? enter(p, p.home, secs, desc) : send(p, 'home', d, 'heading home', { secs, desc }); }
+export function goHome(p, secs, desc) { if (p.visitor) return INTENTS.bench.go(p) || INTENTS.cafe.go(p); const d = doorOf(p.home); return (p.c === d[0] && p.r === d[1]) ? enter(p, p.home, secs, desc) : send(p, 'home', d, 'heading home', { secs, desc }); }
 export function sendToWork(p, b = pick(bType('office')), desc = 'going to work') { return send(p, 'work', doorOf(b), desc); }
 const toDoor = (p, intent, type, desc) => send(p, intent, doorOf(pick(bType(type))), desc);
 const look = (p, tile, what) => send(p, 'look', tile, `going to look at ${what}`, what);
@@ -87,6 +93,7 @@ const URGES = [
 ];
 
 export function choose(p) {
+  if (p.visitor && performance.now() > p.leaveAt) { if (send(p, 'bus', pick(BUS_WAIT), 'heading for the bus home')) return; }
   if (p.urge === 'break') { p.urge = null; const ok = Math.random() < 0.65 ? INTENTS.chat.go(p) : INTENTS.ducks.go(p); if (ok !== false) { p.desc = p.desc.replace('going', 'on a break, going'); return; } }
   if (mode.current === 'gathering') { const t = [Math.floor(rnd(PLAZA.c0 + 1, PLAZA.c1)), Math.floor(rnd(PLAZA.r0 + 1, PLAZA.r1 + 1))]; if (walkable(...t)) send(p, 'gather', t, 'heading to the gathering'); p.wait = rnd(1, 3); return; }
   if (mode.current === 'nap') return idle(p, 'napping', [5, 5], '💤');

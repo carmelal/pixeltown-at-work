@@ -215,7 +215,7 @@ export function drawGround(n, now) {
   // plaza flowerbeds, fountain, benches
   if (SEASON !== 'winter') for (const [c, r] of flowers) for (let i = 0; i < 3; i++) px(c * T + 1 + i * 3, r * T + 3 + (i % 2) * 2, SEASON === 'spring' ? ['#f7a', '#fd6', '#fff'][(c * 5 + i) % 3] : SEASON === 'summer' ? '#e44' : '#c84', 1, 1);
   px(fountain.c * T + 1, fountain.r * T + 1, '#889', 14, 14); px(fountain.c * T + 3, fountain.r * T + 3, PAL.snow ? '#cde' : '#5ac', 10, 10);
-  if (!PAL.snow) px(fountain.c * T + 7, fountain.r * T + 3 + Math.round(Math.sin(now / 90)), '#cff', 2, 4);
+  if (!PAL.snow) { const big = now < fountain.sprayUntil; px(fountain.c * T + 7, fountain.r * T + (big ? -4 : 3) + Math.round(Math.sin(now / 90)), '#cff', 2, big ? 11 : 4); if (big) { px(fountain.c * T + 4, fountain.r * T - 1 + Math.round(Math.sin(now / 70)), '#cff', 1, 3); px(fountain.c * T + 11, fountain.r * T - 1 + Math.round(Math.cos(now / 70)), '#cff', 1, 3); } }
   for (const [c, r] of benches) { px(c * T + 1, r * T + 4, '#6b4a2a', 6, 2); px(c * T + 1, r * T + 6, '#4a3018', 1, 1); px(c * T + 6, r * T + 6, '#4a3018', 1, 1); }
 }
 export function drawParticle(f) {

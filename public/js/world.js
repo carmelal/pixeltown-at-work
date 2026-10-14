@@ -68,7 +68,7 @@ export const VISITS = {
 };
 export const isOpen = t => { const v = VISITS[t]; if (!v) return true; const h = hourNow(); return h >= v.open[0] && (h < v.open[1] || h + 24 < v.open[1]); };
 
-export const fountain = { c: 14, r: 7 };                                // 2x2
+export const fountain = { c: 14, r: 7, sprayUntil: 0 };                                // 2x2
 export const pond = { c: 0, r: 15, w: 14, h: 2 };                       // bottom-left, bleeds off the left and bottom edges
 export const benches = [[11, 8], [18, 8], [2, 14], [10, 14], [15, 15], [26, 14]];
 export const trees = [[14, 15], [16, 15], [17, 15], [16, 8], [12, 7], [10, 7], [19, 7], [4, 2], [9, 2], [21, 2], [27, 2]];   // bank, plaza, back alley (alley trees split it into pockets; only reachable pockets get used)

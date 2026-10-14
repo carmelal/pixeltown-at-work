@@ -59,7 +59,7 @@ function render(now) {
 // ---------- hover: one list of hit targets, nearest wins, then area fallbacks ----------
 function hitTargets() {
   const t = [];
-  for (const p of people) if (!p.inside) t.push({ x: p.x, y: p.y + 2, r: 5, text: `${p.name} — ${p.desc}` });
+  for (const p of people) if (!p.inside) t.push({ x: p.x, y: p.y + 2, r: 5, text: `${p.name}${p.visitor ? ' (visiting)' : ''} — ${p.desc}` });
   for (const d of dogs) t.push({ x: d.x, y: d.y, r: 5, text: `${d.name} (${d.temperament}) — ${d.desc}` });
   if (carrier.active) t.push({ x: carrier.x, y: carrier.y + 2, r: 5, text: `mail carrier — ${carrier.desc}` });
   if (geese.state !== 'away') for (const g of geese.birds) t.push({ x: g.x, y: g.y, r: 5, text: `canada goose — ${geese.state === 'landed' ? 'occupying the park' : geese.state === 'leaving' ? 'leaving in a huff' : 'flying over'}` });
