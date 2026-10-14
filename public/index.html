@@ -18,7 +18,7 @@
 </head>
 <body>
 <div id="stage"><canvas id="c" width="240" height="136"></canvas><canvas id="hi"></canvas></div>
-<div id="bar"><span data-ev="commit">commit</span><span data-ev="push">push</span><span data-ev="incident">incident</span><span data-ev="allclear">all clear</span><span data-ev="party">party</span><span data-ev="nap">nap</span><span data-ev="weather">weather</span><span data-ev="bus">bus</span><span id="conn">…</span></div>
+<div id="bar"><span data-ev="commit">commit</span><span data-ev="push">push</span><span data-ev="incident">incident</span><span data-ev="allclear">all clear</span><span data-ev="party">party</span><span data-ev="nap">nap</span><span data-ev="weather">weather</span><span data-ev="bus">bus</span><span data-ev="geese">geese</span><span id="conn">…</span></div>
 <div id="tip"></div>
 <script>
 const cv = document.getElementById('c'), ctx = cv.getContext('2d'), tip = document.getElementById('tip');
@@ -218,7 +218,7 @@ function tick(p, dt) {
     return;
   }
   p.wait -= dt;
-  if (p.act === 'fish' && p.wait > 0 && (p.fishT -= dt) <= 0) { const r = Math.random(); p.say = r < 0.25 ? pick(['🐟', '🐠']) : r < 0.32 ? '🥾' : ''; if (p.say === '🐟' || p.say === '🐠') for (const k of ducks) if (Math.random() < 0.5) k.say = '🦆'; p.fishT = rnd(3, 8); }
+  if (p.act === 'fish' && p.wait > 0 && (p.fishT -= dt) <= 0) { const r = Math.random(); p.say = r < 0.25 ? pick(['🐟', '🐠']) : r < 0.32 ? '🥾' : ''; if (p.say === '🐟' || p.say === '🐠') for (const k of ducks) if (Math.random() < 0.5) k.say = '🎺'; p.fishT = rnd(3, 8); }
   if (p.act === 'chat' && p.wait > 0 && (p.nextSay -= dt) <= 0) { p.say = Math.random() < 0.8 ? pick(TOPICS) : ''; p.nextSay = rnd(2, 5); }
   if (p.wait > 0) return;
   p.say = '';
@@ -230,21 +230,32 @@ function tick(p, dt) {
 
 // ---------- dog, ducks, bus, birds, particles ----------
 const DOGS = [  // temperament drives behaviour: lazy dogs lie around, loyal ones stick to people, wild ones chase, social ones hang around chats
-  { name: 'tuck', coat: '#1a1a1a', marking: 'tuxedo', size: 3, ears: 'floppy', collar: '#3b82f6', temperament: 'loyal', favourite: 'person', loyalty: 0.97, curiosity: 0.25, laziness: 0.05 },
+  { name: 'tuck', coat: '#1a1a1a', marking: 'tuxedo', size: 3, ears: 'floppy', collar: '#3b82f6', temperament: 'loyal', favourite: 'cursor', loyalty: 0.97, curiosity: 0.25, laziness: 0.05 },
   { name: 'biscuit', coat: '#c9a060', marking: 'none', size: 2, ears: 'floppy', collar: '#d33', temperament: 'lazy', loyalty: 0.3, curiosity: 0.0, laziness: 0.6 },
   { name: 'pepper', coat: '#8a8a90', marking: 'spots', size: 1, ears: 'pointy', collar: null, temperament: 'wild', loyalty: 0.3, curiosity: 0.55, laziness: 0.02 },
   { name: 'rufus', coat: '#8a5a2b', marking: 'none', size: 2, ears: 'pointy', collar: '#2a4', temperament: 'social', loyalty: 0.6, curiosity: 0.1, laziness: 0.15 },
   { name: 'olive', coat: '#e8e0d0', marking: 'spots', size: 2, ears: 'floppy', collar: '#a3d', temperament: 'lazy', loyalty: 0.5, curiosity: 0.05, laziness: 0.45 },
 ];
-const dogs = DOGS.map((d, i) => { const [c, r] = pick(walkTiles); return { ...d, c, r, x: c * T + 4, y: r * T + 4, route: [], wait: rnd(0, 3), follow: null, chase: null, lying: false, say: '', flip: false, frame: 0, desc: 'sniffing around' }; });
+const PLAYFUL = { wild: 0.35, social: 0.3, loyal: 0.15, lazy: 0.03 };
+const dogs = DOGS.map((d, i) => { const [c, r] = pick(walkTiles); return { ...d, play: null, playUntil: 0, c, r, x: c * T + 4, y: r * T + 4, route: [], wait: rnd(0, 3), follow: null, chase: null, lying: false, say: '', flip: false, frame: 0, desc: 'sniffing around' }; });
+const cursor = { x: 0, y: 0, active: false };
 const nearestDog = p => dogs.slice().sort((a, b) => Math.hypot(a.c - p.c, a.r - p.r) - Math.hypot(b.c - p.c, b.r - p.r))[0];
 const spotsAround = (c, r) => [[c + 1, r], [c - 1, r], [c, r + 1], [c, r - 1]].filter(t => walkable(...t));
+function startSwim(d) { d.chase = null; d.swim = { t: rnd(5, 10), tx: clamp(d.x + rnd(-10, 10), 4, pond.w * T - 8), ty: rnd(pond.r * T + 4, H - 4), back: [d.c, d.r] }; d.say = '💦'; d.desc = 'jumped in the pond'; for (let i = 0; i < 8; i++) particles.push({ k: 'splash', x: d.swim.tx, y: d.swim.ty, vx: rnd(-20, 20), vy: rnd(-40, -10), t: 0.6 }); }
 function tickDog(d, dt) {
   d.frame += dt;
+  if (d.swim) {                                                   // paddling about, then back to the bank tile it came from
+    const sw = d.swim; sw.t -= dt;
+    if (sw.t <= 0) { const bx = sw.back[0] * T + 4, by = sw.back[1] * T + 4, dx = bx - d.x, dy = by - d.y, L = Math.hypot(dx, dy); if (L < 1) { d.x = bx; d.y = by; d.swim = null; d.say = '💦'; d.desc = 'shaking off'; d.wait = rnd(2, 4); for (let i = 0; i < 6; i++) particles.push({ k: 'splash', x: d.x, y: d.y - 2, vx: rnd(-25, 25), vy: rnd(-30, 0), t: 0.5 }); } else { d.x += dx / L * Math.min(14 * dt, L); d.y += dy / L * Math.min(14 * dt, L); d.flip = dx < 0; } return; }
+    const dx = sw.tx - d.x, dy = sw.ty - d.y, L = Math.hypot(dx, dy);
+    if (L < 1) { sw.tx = clamp(d.x + rnd(-12, 12), 4, pond.w * T - 8); sw.ty = rnd(pond.r * T + 4, H - 4); if (Math.random() < 0.3) d.say = pick(['💦', '😆', '🦆']); for (const k of ducks) if (!k.air && Math.hypot(k.x - d.x, k.y - d.y) < 12) { k.say = '🎺'; k.air = { phase: 'out', vx: k.x < d.x ? -40 : 40 }; } }
+    else { d.x += dx / L * Math.min(12 * dt, L); d.y += dy / L * Math.min(12 * dt, L); d.flip = dx < 0; }
+    d.desc = 'swimming after the ducks'; return;
+  }
   if (d.route.length) {
-    const [c, r] = d.route[0], tx = c * T + 4, ty = r * T + 4, sp = (mode === 'incident' || d.chase) ? 44 : 20 + d.size * 2, dx = tx - d.x, dy = ty - d.y, L = Math.hypot(dx, dy);
+    const [c, r] = d.route[0], tx = c * T + 4, ty = r * T + 4, sp = (mode === 'incident' || d.chase) ? 44 : d.play ? 36 : 20 + d.size * 2, dx = tx - d.x, dy = ty - d.y, L = Math.hypot(dx, dy);
     if (dx) d.flip = dx < 0;
-    if (L <= sp * dt) { d.x = tx; d.y = ty; d.c = c; d.r = r; d.route.shift(); if (!d.route.length) { d.wait = d.chase ? 0 : rnd(1, 4); } }
+    if (L <= sp * dt) { d.x = tx; d.y = ty; d.c = c; d.r = r; d.route.shift(); if (!d.route.length) { d.wait = d.chase ? 0 : d.play ? rnd(0.2, 0.6) : rnd(1, 4); } }
     else { d.x += dx / L * sp * dt; d.y += dy / L * sp * dt; }
     // mid-chase: squirrel flees when the dog gets close
     if (d.chase && d.chase.kind === 'squirrel' && !d.chase.hidden && Math.hypot(d.chase.x - d.x, d.chase.y - d.y) < 10) { hideSquirrel(d.chase); d.say = '🐿️'; d.chase = null; d.route = []; d.wait = 2.5; d.desc = 'lost the squirrel'; }
@@ -254,9 +265,22 @@ function tickDog(d, dt) {
   d.say = ''; d.lying = false;
   if (mode === 'incident') { d.say = '😨'; d.wait = 3; d.chase = null; const t = pick(trees); const sp = spotsAround(t[0], t[1]); if (sp.length) { d.route = path([d.c, d.r], pick(sp)) || []; d.desc = 'hiding'; } return; }
   if (d.chase) {                                              // arrived at the chase target
-    if (d.chase.kind === 'ducks') { for (const k of ducks) { k.scared = 3; k.say = '🦆'; } d.say = pick(['🦆', '😤']); d.desc = 'barking at the ducks'; }
+    if (d.chase.kind === 'ducks') { for (const k of ducks) { if (k.air) continue; k.say = '🎺'; if (Math.random() < 0.6) k.air = { phase: 'out', vx: k.x < d.x ? -40 : 40 }; else k.scared = 3; } d.say = pick(['🦆', '😤']); d.desc = 'barking at the ducks'; if (d.temperament === 'wild') return startSwim(d); }
+    else if (d.chase.kind === 'geese') { if (geese.state === 'landed') { flushGeese(); d.say = '😤'; d.desc = 'scattered the geese'; if (d.temperament === 'wild' && geese.tile[0] < pond.w) return startSwim(d); } else d.desc = 'missed the geese'; }
     else if (!d.chase.hidden) { hideSquirrel(d.chase); d.say = '🐿️'; d.desc = 'lost the squirrel'; }
     d.chase = null; d.wait = rnd(2, 4); return;
+  }
+  // playing: two dogs take turns running at each other for a while
+  if (d.play) {
+    const o = d.play;
+    if (performance.now() > d.playUntil || o.play !== d || o.lying) { d.play = null; if (o.play === d) o.play = null; d.say = '😮‍💨'; d.desc = 'worn out'; d.wait = rnd(3, 6); return; }
+    const sp = spotsAround(o.c, o.r); if (sp.length && Math.hypot(o.c - d.c, o.r - d.r) > 1.2) d.route = path([d.c, d.r], pick(sp)) || [];
+    else { d.route = path([d.c, d.r], pick(walkTiles.filter(t => Math.hypot(t[0] - d.c, t[1] - d.r) < 4))) || []; }
+    if (Math.random() < 0.4) d.say = pick(['🎾', '😆', '🐾', '😛']); d.desc = `playing with ${o.name}`; d.flip = o.x < d.x; return;
+  }
+  if (Math.random() < PLAYFUL[d.temperament]) {
+    const o = pick(dogs.filter(o => o !== d && !o.play && !o.chase && !o.lying && Math.hypot(o.c - d.c, o.r - d.r) < 9));
+    if (o) { const until = performance.now() + rnd(8, 15) * 1000; d.play = o; o.play = d; d.playUntil = until; o.playUntil = until; o.route = []; o.wait = 0; o.follow = null; d.follow = null; o.say = '❗️'; d.say = '🎾'; d.desc = `playing with ${o.name}`; o.desc = `playing with ${d.name}`; d.wait = 0.4; return; }
   }
   // lazy dogs flop down wherever they are (more so in the heat of the afternoon and when it is warm)
   const lazyNow = d.laziness * (SEASON === 'summer' ? 1.4 : 1) * (hourNow() > 13 && hourNow() < 16 ? 1.5 : 1);
@@ -265,13 +289,21 @@ function tickDog(d, dt) {
   if (d.temperament === 'social' && groups.length && Math.random() < 0.4) { const g = pick(groups), m = pick(g.members), sp = spotsAround(m.c, m.r); if (sp.length) { d.follow = null; d.route = path([d.c, d.r], pick(sp)) || []; d.desc = `joining ${m.name}'s conversation`; return; } }
   // distraction: squirrels or ducks
   if (Math.random() < d.curiosity) {
+    if (geese.state === 'landed' && Math.random() < 0.6) { const sp = spotsAround(...geese.tile); if (sp.length) { d.chase = { kind: 'geese' }; d.route = path([d.c, d.r], pick(sp)) || []; d.desc = 'going for the geese'; d.say = '❗️'; return; } }
     const sq = squirrels.find(q => !q.hidden);
     if (sq) { d.chase = sq; const sp = spotsAround(sq.c, sq.r); if (sp.length) { d.route = path([d.c, d.r], pick(sp)) || []; d.desc = 'chasing a squirrel'; d.say = '❗'; return; } d.chase = null; }
     if (pondSide.length && Math.random() < 0.5) { d.chase = { kind: 'ducks' }; d.route = path([d.c, d.r], pick(pondSide)) || []; d.desc = 'going after the ducks'; d.say = '❗'; return; }
   }
+  // tuck follows the mouse cursor while it is over the town
+  if (d.favourite === 'cursor' && cursor.active) {
+    d.follow = null; d.desc = 'following the cursor';
+    let best = null, bd = 1e9; for (const t of walkTiles) { const dist = Math.hypot(t[0] * T + 4 - cursor.x, t[1] * T + 4 - cursor.y); if (dist < bd) { bd = dist; best = t; } }
+    if (best && Math.hypot(best[0] - d.c, best[1] - d.r) > 1.5) { d.route = path([d.c, d.r], best) || []; } else { d.wait = rnd(0.5, 1.5); d.flip = cursor.x < d.x; if (Math.random() < 0.25) d.say = pick(['🐾', '❤️', '🐶']); }
+    return;
+  }
   // following
   if (d.follow && (d.follow.inside || Math.random() > d.loyalty)) d.follow = null;
-  if (!d.follow) { if (d.favourite === 'person' && !d.fav) d.fav = pick(people); const fav = d.fav || null; if (fav && !fav.inside && Math.random() < 0.8) d.follow = fav; else if (Math.random() < 0.35) d.follow = pick(people.filter(p => !p.inside)); }
+  if (!d.follow && Math.random() < 0.35) d.follow = pick(people.filter(p => !p.inside));
   if (d.follow) {
     const f = d.follow, sp = spotsAround(f.c, f.r);
     d.desc = `following ${f.name}`; if (sp.length && Math.hypot(f.c - d.c, f.r - d.r) > 1.5) { d.route = path([d.c, d.r], pick(sp)) || []; } else { d.wait = rnd(1, 3); d.flip = f.x < d.x; if (Math.random() < 0.3) d.say = pick(['🐾', '❤️']); }
@@ -280,6 +312,52 @@ function tickDog(d, dt) {
   d.desc = 'sniffing around'; d.route = path([d.c, d.r], pick(walkTiles)) || []; if (Math.random() < 0.2) d.say = '🐾';
 }
 // squirrels live in trees and occasionally dash to another tree
+// canada geese: a V flies over now and then; sometimes the flock lands in the park, hisses at anyone who comes close, and leaves when a dog shows up
+const geese = { state: 'away', timer: rnd(20, 60), birds: [], dir: 1, tile: null, landing: false };
+function spawnGeese() {
+  geese.dir = Math.random() < 0.5 ? 1 : -1; geese.landing = Math.random() < 0.55; geese.state = 'flying';
+  const n = ri(4, 7), y0 = rnd(5, 10), x0 = geese.dir > 0 ? -10 : W + 10;
+  geese.birds = Array.from({ length: n }, (_, i) => { const k = Math.ceil(i / 2), side = i % 2 ? 1 : -1; return { x: x0 - geese.dir * k * 5, y: y0 + k * 2 * (side > 0 ? 1 : 0.6), gx: 0, gy: 0, wait: 0, say: '', flip: geese.dir < 0 }; });
+  if (geese.landing) { geese.tile = pick(walkTiles.filter(([c, r]) => r === 14 && c >= 3 && c <= 12)); if (!geese.tile) geese.landing = false; }
+}
+function flushGeese() { geese.state = 'leaving'; geese.dir = 1; for (const g of geese.birds) { g.say = '🎺'; g.flip = false; } }
+function tickGeese(dt, now) {
+  geese.timer -= dt;
+  if (geese.state === 'away') { if (geese.timer <= 0 && night() < 0.7 && !wet()) spawnGeese(); return; }
+  if (geese.state === 'flying') {
+    for (const g of geese.birds) g.x += geese.dir * 22 * dt;
+    const lead = geese.birds[0];
+    if (geese.landing && Math.abs(lead.x - (geese.tile[0] * T + 4)) < 6) { geese.state = 'landing'; geese.birds.forEach((g, i) => { g.gx = geese.tile[0] * T + 4 + rnd(-10, 10); g.gy = geese.tile[1] * T + 4 + rnd(-2, 3); }); return; }
+    if ((geese.dir > 0 && lead.x > W + 40) || (geese.dir < 0 && lead.x < -40)) { geese.state = 'away'; geese.timer = rnd(60, 180); }
+    return;
+  }
+  if (geese.state === 'landing') {
+    let done = true; for (const g of geese.birds) { const dx = g.gx - g.x, dy = g.gy - g.y, L = Math.hypot(dx, dy); if (L > 1) { done = false; g.x += dx / L * Math.min(28 * dt, L); g.y += dy / L * Math.min(28 * dt, L); g.flip = dx < 0; } }
+    if (done) { geese.state = 'landed'; geese.timer = rnd(20, 45); for (const g of geese.birds) g.say = Math.random() < 0.4 ? '🎺' : ''; }
+    return;
+  }
+  if (geese.state === 'landed') {
+    for (const g of geese.birds) {
+      if ((g.wait -= dt) <= 0) { g.gx = clamp(g.x + rnd(-6, 6), geese.tile[0] * T - 12, geese.tile[0] * T + 20); g.gy = clamp(g.y + rnd(-2, 2), 14 * T + 1, 14 * T + 7); g.wait = rnd(1, 4); g.say = Math.random() < 0.08 ? '🎺' : ''; }
+      const dx = g.gx - g.x, dy = g.gy - g.y, L = Math.hypot(dx, dy); if (L > 0.5) { g.x += dx / L * Math.min(6 * dt, L); g.y += dy / L * Math.min(6 * dt, L); g.flip = dx < 0; }
+    }
+    // hiss at people who get too close; they back off
+    for (const p of people) if (!p.inside && !p.route.length && geese.birds.some(g => Math.hypot(g.x - p.x, g.y - p.y) < 9)) { const g = geese.birds.find(g => Math.hypot(g.x - p.x, g.y - p.y) < 9); g.say = '🔪'; g.flip = p.x < g.x; if (p.act === 'idle' || p.act === 'fish') { p.say = '😬'; p.desc = 'backing away from the geese'; goTo(p, pick(walkTiles.filter(t => Math.hypot(t[0] * T - p.x, t[1] * T - p.y) > 30)), 'walk', 'getting away from the geese'); } }
+    if (geese.timer <= 0) flushGeese();
+    return;
+  }
+  if (geese.state === 'leaving') { for (const g of geese.birds) { g.x += 30 * dt; g.y -= 14 * dt; if (g.y < 6) g.y = 6; } if (geese.birds[0].x > W + 40) { geese.state = 'away'; geese.timer = rnd(90, 240); } }
+}
+function drawGoose(g, now) {
+  const x = Math.round(g.x), y = Math.round(g.y), f = g.flip ? -1 : 1, body = '#6e6358', neck = '#1a1a1a';
+  if (geese.state === 'landed' || geese.state === 'landing') {
+    px(x - 2, y - 1, body, 5, 2); px(x + f * 2, y - 4, neck, 1, 3); px(x + f * 3, y - 4, neck, 1, 1); px(x + f * 2, y - 2, '#eee', 1, 1); px(x - f * 3, y - 2, body, 1, 1);
+    px(x - 1, y + 1, '#333', 1, 1); px(x + 1, y + 1, '#333', 1, 1);
+  } else {
+    const ph = (now / 500 + x / 20) % 1, flap = ph < 0.5 ? 0 : 1; px(x - 1, y, body, 3, 1); px(x + f * 2, y, neck, 2, 1); px(x - 1, y + (flap ? -1 : 1), body, 1, 1); px(x + 1, y + (flap ? -1 : 1), body, 1, 1);
+  }
+  if (g.say) label(g.say, x, y - 6, '#fff', 4.5, 'center', false);
+}
 const squirrels = Array.from({ length: 3 }, () => ({ kind: 'squirrel', hidden: true, wait: rnd(5, 30), tree: pick(trees), c: 0, r: 0, x: 0, y: 0, route: [], flip: false, frame: 0 }));
 function hideSquirrel(q) { q.hidden = true; q.route = []; q.wait = rnd(8, 40); q.tree = trees.slice().sort((a, b) => Math.hypot(a[0] - q.c, a[1] - q.r) - Math.hypot(b[0] - q.c, b[1] - q.r))[0]; }
 function tickSquirrel(q, dt) {
@@ -295,13 +373,20 @@ function tickSquirrel(q, dt) {
   }
   if ((q.wait -= dt) <= 0) hideSquirrel(q);                   // pause at the foot of the tree, then climb
 }
-const ducks = Array.from({ length: 4 }, (_, i) => ({ x: (2 + i * 3) * T, y: (pond.r + 0.6 + (i % 2) * 0.7) * T, tx: 0, ty: 0, wait: rnd(0, 2), flip: false, lure: null, say: '' }));
+const ducks = Array.from({ length: 4 }, (_, i) => ({ male: i % 2 === 0, air: null, x: (2 + i * 3) * T, y: (pond.r + 0.6 + (i % 2) * 0.7) * T, tx: 0, ty: 0, wait: rnd(0, 2), flip: false, lure: null, say: '' }));
 function tickDucks(dt) {
   for (const d of ducks) {
     if (d.lure && (d.lure.desc !== 'feeding the ducks')) d.lure = null;
+    if (d.air) {                                                   // in flight: climb and leave, wait out of sight, glide back in and land
+      const a = d.air;
+      if (a.phase === 'out') { d.x += a.vx * dt; d.y -= 26 * dt; d.flip = a.vx < 0; if (d.x < -12 || d.x > W + 12 || d.y < 2) { a.phase = 'gone'; a.t = rnd(12, 35); } }
+      else if (a.phase === 'gone') { if ((a.t -= dt) <= 0) { a.phase = 'back'; d.x = Math.random() < 0.5 ? -8 : W + 8; d.y = rnd(4, 12); d.tx = rnd(4, pond.w * T - 8); d.ty = rnd(pond.r * T + 3, H - 4); } }
+      else { const dx = d.tx - d.x, dy = d.ty - d.y, L = Math.hypot(dx, dy); d.flip = dx < 0; if (L < 1.5) { d.air = null; d.say = '💦'; d.wait = 1; } else { d.x += dx / L * Math.min(34 * dt, L); d.y += dy / L * Math.min(34 * dt, L); } }
+      continue;
+    }
     if (d.scared > 0) { d.scared -= dt; d.lure = null; if (d.wait > 0.3) d.wait = 0.3; }
     if ((d.wait -= dt) <= 0) {
-      d.say = Math.random() < 0.12 ? '🦆' : '';
+      d.say = Math.random() < 0.12 ? '🎺' : '';
       const left = 2, right = pond.w * T - 4, top = pond.r * T + 2, bottom = H - 3;
       if (d.lure) { d.tx = clamp(d.lure.x + rnd(-6, 6), left, right); d.ty = clamp(d.lure.y + rnd(-4, 4), top, bottom); }
       else { d.tx = rnd(left, right); d.ty = rnd(top, bottom); }
@@ -358,6 +443,7 @@ function onEvent(ev) {
     case 'wake': mode = 'normal'; for (const p of people) if (p.inside !== bus) p.wait = rnd(0, 2); return say('wake up' + msg);
     case 'weather': rollWeather(ev.msg && WICON[ev.msg] ? ev.msg : null); return say(`${WICON[weather.type]} ${weather.type}`);
     case 'bus': if (bus.state === 'away') bus.timer = 0; return;
+    case 'geese': if (geese.state === 'away') { geese.timer = 0; spawnGeese(); geese.landing = true; geese.tile = pick(walkTiles.filter(([c, r]) => r === 14 && c >= 3 && c <= 12)) || geese.tile; } return;
     default: { const p = pick(people.filter(p => !p.inside)) || people[0]; p.say = '❓️'; p.wait = Math.max(p.wait, 3); return say(ev.type + msg); }
   }
 }
@@ -410,6 +496,11 @@ function drawDog(d) {
   const bw = 3 + d.size, bh = d.size === 3 ? 3 : 2, x = Math.round(d.x) - Math.floor(bw / 2), y = Math.round(d.y) - bh, moving = d.route.length > 0, step = moving ? Math.floor(d.frame * 10) % 2 : 0;
   const fx = d.flip ? x - 1 : x + bw, dir = d.flip ? -1 : 1;                 // head column just in front of the body
   const dark = `rgba(0,0,0,0.25)`, white = '#f2f2f2';
+  if (d.swim) {                                                                  // only the head and a sliver of back show above the water
+    const wy = Math.round(d.y); px(x + 1, wy - 1, d.coat, bw - 2, 1); px(fx, wy - 2, d.coat, 1, 2); px(fx + dir, wy - 1, d.marking === 'tuxedo' ? white : d.coat, 1, 1); px(fx, wy - 2, '#111', 1, 1);
+    if (d.ears === 'pointy') px(fx, wy - 3, d.coat, 1, 1); if (d.collar) px(fx - dir, wy - 1, d.collar, 1, 1);
+    px(x - 1, wy, 'rgba(255,255,255,0.35)', bw + 3, 1); if (d.say) label(d.say, x + bw / 2, wy - 5, '#fff', 4.5, 'center', false); return;
+  }
   if (d.lying) {                                                                 // flat: body one row shorter, head resting forward, no legs
     const ly = y + bh - 2; px(x, ly, d.coat, bw, 2); px(fx, ly, d.coat, 1, 2); px(fx + dir, ly + 1, d.coat, 1, 1);
     if (d.marking === 'tuxedo') { px(fx + dir, ly + 1, white, 1, 1); px(x + (d.flip ? 0 : bw - 2), ly + 1, white, 2, 1); }
@@ -457,7 +548,12 @@ function drawShelter(n) {                                                      /
   px(x + 10, y - 7, '#2d3340', 1, 3); px(x + 9, y - 8, '#e8b020', 3, 2);
   if (n > 0.3) { ctx.fillStyle = `rgba(255,240,200,${0.18 * n})`; ctx.fillRect(x + 1, y - 2, 22, 9); }
 }
-function drawDuck(d) { const x = Math.round(d.x), y = Math.round(d.y); px(x, y, '#f2e8c0', 2, 1); px(d.flip ? x - 1 : x + 2, y - 1, '#f2e8c0', 1, 1); px(d.flip ? x - 2 : x + 3, y - 1, '#e8a020', 1, 1); if (d.say) label(d.say, x + 1, y - 4, '#fff', 4.5, 'center', false); }
+function drawDuck(d, now) {                                                 // mallards: drakes with a green head, hens mottled brown
+  const x = Math.round(d.x), y = Math.round(d.y), f = d.flip ? -1 : 1, body = d.male ? '#8a7a66' : '#8c6a44', head = d.male ? '#1f7a3a' : '#7a5a3a';
+  if (d.air) { const flap = Math.floor(now / 170 + x / 10) % 2; px(x - 1, y, body, 3, 1); px(x + f * 2, y, head, 1, 1); px(x - 1, y + (flap ? -1 : 1), d.male ? '#5a6a90' : body, 1, 1); px(x + 1, y + (flap ? -1 : 1), d.male ? '#5a6a90' : body, 1, 1); }
+  else { px(x - 1, y, body, 3, 1); if (d.male) { px(x - f * 1, y, '#5a6a90', 1, 1); px(x + f * 1, y - 1, '#eee', 1, 1); } px(x + f * 1, y - 1, head, 1, 1); px(x + f * 1, y - 2, head, 1, 1); px(x + f * 2, y - 2, '#e8b020', 1, 1); }
+  if (d.say) label(d.say, x + 1, y - 4, '#fff', 4.5, 'center', false);
+}
 function drawBus() {
   if (bus.state === 'away') return;
   const dark = night() > 0.5;
@@ -481,16 +577,16 @@ function draw(now) {
   // sky
   const cloudy = weather.type !== 'clear' ? 0.35 : 0;
   ctx.fillStyle = mode === 'incident' ? `rgb(${95 - 50 * n},${40 - 20 * n},${50 - 25 * n})` : `rgb(${lerp(120, 150, cloudy) - 105 * n},${lerp(175, 160, cloudy) - 150 * n},${lerp(225, 175, cloudy) - 170 * n})`;
-  ctx.fillRect(0, 0, W, SKY * T);
+  ctx.fillRect(0, 0, W, SKY * T + 6);
   if (n > 0.5) for (let i = 0; i < 25; i++) px((i * 97) % W, (i * 53) % 14, '#ddd');
   px(W - 22, 3, n > 0.5 ? '#f0f0e0' : '#ffd34d', 6, 6);
   for (let i = 0; i < (weather.type === 'clear' ? 2 : 5); i++) { const cx = ((now / (900 + i * 150)) + i * 61) % (W + 40) - 20, cy = 2 + (i * 5) % 9; const c = `rgba(${235 - 70 * n},${235 - 70 * n},${240 - 70 * n},${weather.type === 'clear' ? 0.6 : 0.9})`; px(cx, cy, c, 14, 3); px(cx + 3, cy - 2, c, 7, 2); }
-  for (const b of birds) { px(b.x, b.y, '#333', 1, 1); px(b.x + (Math.floor(now / 150) % 2 ? 1 : -1), b.y - 1, '#333', 1, 1); px(b.x + (Math.floor(now / 150) % 2 ? -1 : 1), b.y - 1, '#333', 1, 1); }
   // ground
-  px(0, SKY * T, rgbn(PAL.grass, n), W, H - SKY * T);
+  ctx.fillStyle = rgbn(PAL.grass, n); ctx.beginPath(); ctx.moveTo(0, H); ctx.lineTo(0, SKY * T + 1);                                   // gently rolling skyline
+  ctx.quadraticCurveTo(W * 0.15, SKY * T - 5, W * 0.32, SKY * T); ctx.quadraticCurveTo(W * 0.45, SKY * T + 3, W * 0.58, SKY * T - 1);
+  ctx.quadraticCurveTo(W * 0.75, SKY * T - 6, W * 0.88, SKY * T - 1); ctx.quadraticCurveTo(W * 0.95, SKY * T + 1, W, SKY * T); ctx.lineTo(W, H); ctx.closePath(); ctx.fill();
   const pathCol = PAL.snow ? `rgb(${215 - 70 * n},${212 - 70 * n},${205 - 70 * n})` : `rgb(${196 - 70 * n},${176 - 65 * n},${132 - 50 * n})`;
   for (const r of [6, 10]) { px(0, r * T + 1, pathCol, W, 6); for (let x = 1; x < W; x += 5) px(x, r * T + 2 + (x * 7) % 4, PAL.snow ? '#cdd' : `rgb(${170 - 60 * n},${150 - 55 * n},${110 - 40 * n})`, 2, 1); }   // footpaths
-  for (let x = 0; x < W; x += 6) px(x, SKY * T + 5, pathCol, 3, 1);                                        // faint track along the back alley
   px(9 * T, 7 * T, `rgb(${150 - 60 * n},${140 - 60 * n},${120 - 50 * n})`, 12 * T, 3 * T);                       // plaza
   for (let x = 0; x < W; x += 3) px(x, 13 * T, `rgba(90,70,40,${n > 0.5 ? 0.5 : 0.8})`, 2, 1);                 // park path edge
   const water = PAL.snow && weather.type !== 'rain' ? `rgb(${170 - 60 * n},${200 - 70 * n},${225 - 80 * n})` : `rgb(${50 - 20 * n},${110 - 50 * n},${180 - 80 * n})`;
@@ -511,18 +607,21 @@ function draw(now) {
     ...people.map(p => ({ y: p.y, f: () => drawPerson(p, now) })),
     ...dogs.map(d => ({ y: d.y, f: () => drawDog(d) })),
     ...squirrels.map(q => ({ y: q.y, f: () => drawSquirrel(q) })),
-    ...ducks.map(d => ({ y: d.y, f: () => drawDuck(d) })),
+    ...(geese.state === 'away' ? [] : geese.birds.map(g => ({ y: geese.state === 'landed' || (geese.state === 'landing' && Math.abs(g.gy - g.y) < 3) ? g.y + 1 : 1e9, f: () => drawGoose(g, now) }))),
+    ...ducks.filter(d => !(d.air && d.air.phase === 'gone')).map(d => ({ y: d.air ? 1e9 : d.y, f: () => drawDuck(d, now) })),
     { y: bus.state === 'rising' ? H + 1 : bus.y + 1, f: drawBus },
     ...trees.map(([c, r]) => ({ y: r * T + 6, f: () => drawTree(c, r, n) })),
     ...docks.map(d => ({ y: d.r * T + 2, f: () => drawDock(d) })),
     ...lamps.map(([c, r]) => ({ y: r * T + 1, f: () => { px(c * T + 3, r * T - 7, '#345', 1, 8); px(c * T + 2, r * T - 8, n > 0.3 ? '#ffe28a' : '#9ab', 3, 2); if (n > 0.3) { ctx.fillStyle = `rgba(255,220,120,${0.12 * n})`; ctx.fillRect(c * T - 3, r * T - 6, 13, 12); } } })),
   ];
   drawables.sort((a, b) => a.y - b.y).forEach(d => d.f());
+  for (const b of birds) { px(b.x, b.y, '#333', 1, 1); const fl = Math.floor(now / 260 + b.x / 15) % 2; px(b.x + (fl ? 1 : -1), b.y - 1, '#333', 1, 1); px(b.x + (fl ? -1 : 1), b.y - 1, '#333', 1, 1); }
   for (const f of particles) {
     if (f.k === 'rain') px(f.x, f.y, 'rgba(170,200,240,0.8)', 1, 3);
     else if (f.k === 'snow') px(f.x, f.y, '#fff');
     else if (f.k === 'smoke') px(f.x, f.y, `rgba(200,200,210,${clamp(f.t / 3, 0, 0.7)})`, 2, 2);
     else if (f.k === 'leaf') px(f.x, f.y, '#c84');
+    else if (f.k === 'splash') px(f.x, f.y, 'rgba(210,235,255,0.9)');
     else if (f.k === 'petal') px(f.x, f.y, '#f9c');
     else px(f.x, f.y, f.c);
   }
@@ -545,7 +644,7 @@ function loop(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
   if ((mode === 'party' || mode === 'nap') && now > modeUntil) onEvent({ type: 'wake' });
   for (const p of people) tick(p, dt);
-  for (const d of dogs) tickDog(d, dt); for (const q of squirrels) tickSquirrel(q, dt); tickDucks(dt); tickBus(dt); tickAmbient(dt, now);
+  for (const d of dogs) tickDog(d, dt); for (const q of squirrels) tickSquirrel(q, dt); tickGeese(dt, now); tickDucks(dt); tickBus(dt); tickAmbient(dt, now);
   draw(now); requestAnimationFrame(loop);
 }
 fitOverlay();
@@ -554,10 +653,12 @@ requestAnimationFrame(loop);
 // ---------- hover ----------
 cv.onmousemove = e => {
   const r = cv.getBoundingClientRect(), mx = (e.clientX - r.left) * W / r.width, my = (e.clientY - r.top) * H / r.height;
+  cursor.x = mx; cursor.y = my; cursor.active = true;
   const p = people.filter(p => !p.inside).map(p => ({ p, d: Math.hypot(p.x - mx, p.y + 2 - my) })).sort((a, b) => a.d - b.d)[0];
   const b = buildings.find(b => mx >= b.c * T && mx < (b.c + b.w) * T && my >= b.r * T && my < (b.r + b.h) * T);
   if (p && p.d < 5) tip.textContent = `${p.p.name} — ${p.p.desc}`;
   else if (dogs.some(d => Math.hypot(d.x - mx, d.y - my) < 5)) { const d = dogs.find(d => Math.hypot(d.x - mx, d.y - my) < 5); tip.textContent = `${d.name} (${d.temperament}) — ${d.desc}`; }
+  else if (geese.state !== 'away' && geese.birds.some(g => Math.hypot(g.x - mx, g.y - my) < 5)) tip.textContent = `canada goose — ${geese.state === 'landed' ? 'occupying the park' : geese.state === 'leaving' ? 'leaving in a huff' : 'flying over'}`;
   else if (squirrels.some(q => !q.hidden && Math.hypot(q.x - mx, q.y - my) < 4)) tip.textContent = 'squirrel — making a run for it';
   else if (ducks.some(d => Math.hypot(d.x - mx, d.y - my) < 4)) tip.textContent = `duck — ${ducks.some(d => d.scared > 0) ? 'fleeing a dog' : ducks.some(d => d.lure) ? 'coming for bread' : 'paddling'}`;
   else if (bus.state !== 'away' && mx >= bus.x && mx < bus.x + bus.w && my >= bus.y - 14 && my < bus.y + 1) tip.textContent = `bus — ${bus.riders.length ? 'carrying ' + bus.riders.map(p => p.name).join(', ') : 'empty'}`;
@@ -569,7 +670,7 @@ cv.onmousemove = e => {
   else { tip.style.display = 'none'; return; }
   tip.style.display = 'block'; tip.style.left = e.clientX + 12 + 'px'; tip.style.top = e.clientY + 12 + 'px';
 };
-cv.onmouseleave = () => tip.style.display = 'none';
+cv.onmouseleave = () => { tip.style.display = 'none'; cursor.active = false; };
 </script>
 </body>
 </html>

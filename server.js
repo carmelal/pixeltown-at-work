@@ -40,6 +40,6 @@ http.createServer(async (req, res) => {
   }
   const file = path.join(PUB, url.pathname === "/" ? "index.html" : url.pathname);
   if (!file.startsWith(PUB) || !fs.existsSync(file)) { res.writeHead(404); return res.end(); }
-  res.writeHead(200, { "Content-Type": MIME[path.extname(file)] || "application/octet-stream" });
+  res.writeHead(200, { "Content-Type": MIME[path.extname(file)] || "application/octet-stream", "Cache-Control": "no-store" });
   fs.createReadStream(file).pipe(res);
 }).listen(PORT, () => console.log(`pixeltown → http://localhost:${PORT}`));
