@@ -75,7 +75,7 @@ function path(from, to) {                                    // BFS on tiles
 
 // ---------- people ----------
 const PANIC = ['😱', '😨', '😰'];
-const TOPICS = ['☕', '🍕', '🐶', '☔', '💻', '🎮', '📺', '🚲', '🏠', '😂', '🤔', '💸', '🎂', '🚗', '📚', '🧦'];
+const TOPICS = ['☕️', '🍕', '🐶', '🌧️', '💻', '🎮', '📺', '🚲', '🏠', '😂', '🤔', '💸', '🎂', '✈️', '📚', '🧦'];
 const NAMES = ['ada', 'bo', 'cy', 'dot', 'eli', 'fay', 'gus', 'hal', 'ivy', 'jo', 'kit', 'lou', 'mo', 'nan', 'oz', 'pip'];
 const people = [];
 function addPerson(name, isYou = false) {
@@ -109,13 +109,17 @@ function choose(p) {
   if (roll < 0.78) return goTo(p, pick([[13, 9], [16, 9], [13, 6], [16, 6]]), 'walk', 'going to look at the fountain');
   if (roll < 0.82) { const [c, r] = pick(trees); const spots = [[c, r + 1], [c - 1, r], [c + 1, r]].filter(t => walkable(...t)); if (spots.length) return goTo(p, pick(spots), 'walk', 'going to look at a tree'); }
   if (roll < 0.85) return goTo(p, pick(walkTiles.filter(([, r]) => r === 6)), 'walk', 'going to look at the sky');
-  if (roll < 0.9) { const q = pick(people.filter(o => o !== p && o.act === 'idle' && !o.inside)); if (q) { q.wait = 8; q.desc = `chatting with ${p.name}`; q.say = pick(TOPICS); p.chat = q; return goTo(p, [q.c, q.r + (walkable(q.c, q.r + 1) ? 1 : -1)], 'walk', `going to chat with ${q.name}`); } }
+  if (roll < 0.9) {
+    let g = pick(groups.filter(g => g.members.length < 5));
+    if (!g) { const q = pick(people.filter(o => o !== p && o.act === 'idle' && !o.inside && !o.joining)); if (q) { g = { members: [q] }; groups.push(g); q.group = g; q.act = 'chat'; q.wait = rnd(10, 25); q.say = pick(TOPICS); q.nextSay = rnd(2, 5); q.desc = 'waiting to chat'; } }
+    if (g) { const spot = chatSpot(g); if (spot) { p.joining = g; return goTo(p, spot, 'walk', 'going to chat'); } }
+  }
   return goTo(p, doorOf(pick(bType('hall'))), 'walk', 'visiting town hall');
 }
 function arrived(p) {
   const here = buildings.find(b => { const d = doorOf(b); return d[0] === p.c && d[1] === p.r; });
   if (p.act === 'run') return enter(p, p.home, 1e9, 'hiding at home');
-  if (p.chat) { p.say = pick(TOPICS); p.desc = `chatting with ${p.chat.name}`; p.chat = null; p.wait = 8; p.act = 'idle'; return; }
+  if (p.joining) { const g = p.joining; p.joining = null; if (groups.includes(g)) { g.members.push(p); p.group = g; p.act = 'chat'; p.wait = rnd(8, 20); p.say = pick(TOPICS); p.nextSay = rnd(2, 5); faceGroup(g); return; } }
   if (here && /coffee/.test(p.desc)) return enter(p, here, rnd(3, 6), 'inside the cafe');
   if (here && /work/.test(p.desc)) return enter(p, here, rnd(15, 40), 'at work');
   if (here && /errand/.test(p.desc)) return enter(p, here, rnd(3, 8), 'shopping');
@@ -124,9 +128,27 @@ function arrived(p) {
   if (/look at/.test(p.desc)) { p.desc = p.desc.replace('going to look at', 'looking at'); p.say = '👀'; p.wait = rnd(4, 8); p.act = 'idle'; return; }
   p.act = 'idle'; p.desc = 'standing around'; p.wait = rnd(1, 5);
 }
+// ---------- chat groups ----------
+const groups = [];
+const spotTaken = (g, c, r) => g.members.some(m => m.c === c && m.r === r) || people.some(o => o.joining === g && o.route.length && o.route.at(-1)[0] === c && o.route.at(-1)[1] === r);
+function chatSpot(g) {                                        // free tile adjacent to someone in the group, beside them first
+  const cands = [];
+  for (const m of g.members) for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const c = m.c + dc, r = m.r + dr; if (walkable(c, r) && !spotTaken(g, c, r)) cands.push([c, r, dr === 0 ? 0 : 1]); }
+  cands.sort((a, b) => a[2] - b[2] || Math.random() - 0.5); return cands[0] ? [cands[0][0], cands[0][1]] : null;
+}
+function faceGroup(g) {
+  const cx = g.members.reduce((s, m) => s + m.x, 0) / g.members.length;
+  for (const m of g.members) { const names = g.members.filter(o => o !== m).map(o => o.name); m.desc = names.length ? `chatting with ${names.join(', ')}` : 'waiting to chat'; if (Math.abs(m.x - cx) > 1) m.flip = m.x > cx; }
+}
+function leaveGroup(p) {
+  const g = p.group; if (!g) return; p.group = null; g.members = g.members.filter(m => m !== p);
+  if (g.members.length <= 1) { for (const m of g.members) { m.group = null; m.act = 'idle'; m.say = ''; m.desc = 'standing around'; m.wait = rnd(1, 4); } groups.splice(groups.indexOf(g), 1); }
+  else faceGroup(g);
+}
+function clearGroups() { for (const p of people) { p.group = null; p.joining = null; } groups.length = 0; }
 function leave(p) {
   const b = p.inside; p.inside = null; if (!people.some(o => o.inside === b)) b.lit = false;
-  p.say = b.type === 'cafe' ? '☕' : b.type === 'shop' ? '🎁' : b.type === 'office' ? pick(['💻', '😮', '📎']) : b.type === 'hall' ? '📜' : ''; p.act = 'idle'; p.desc = 'just stepped outside'; p.wait = rnd(1, 3);
+  p.say = b.type === 'cafe' ? '☕️' : b.type === 'shop' ? '🛍️' : b.type === 'office' ? pick(['💻', '😮‍💨', '📎']) : b.type === 'hall' ? '📜' : ''; p.act = 'idle'; p.desc = 'just stepped outside'; p.wait = rnd(1, 3);
 }
 function tick(p, dt) {
   p.frame += dt;
@@ -138,8 +160,10 @@ function tick(p, dt) {
     return;
   }
   p.wait -= dt;
+  if (p.act === 'chat' && p.wait > 0 && (p.nextSay -= dt) <= 0) { p.say = Math.random() < 0.8 ? pick(TOPICS) : ''; p.nextSay = rnd(2, 5); }
   if (p.wait > 0) return;
   p.say = '';
+  if (p.group) leaveGroup(p);
   if (p.inside) { if (mode === 'incident') { p.wait = 2; return; } return leave(p); }
   if (choose(p) === false) p.wait = 1;
 }
@@ -151,12 +175,12 @@ function onEvent(ev) {
   const msg = ev.msg ? `: ${ev.msg}` : '';
   switch (ev.type) {
     case 'hello': return;
-    case 'incident': mode = 'incident'; for (const p of people) { p.route = []; p.wait = rnd(0.5, 3); p.act = 'idle'; p.say = pick(PANIC); p.desc = 'panicking'; } return say('🔥 incident' + msg, 1e9);
+    case 'incident': mode = 'incident'; clearGroups(); for (const p of people) { p.route = []; p.wait = rnd(0.5, 3); p.act = 'idle'; p.say = pick(PANIC); p.desc = 'panicking'; } return say('🔥 incident' + msg, 1e9);
     case 'allclear': mode = 'normal'; for (const p of people) { p.wait = rnd(0, 3); if (p.inside) p.wait = rnd(1, 6); } return say('✅ all clear' + msg);
     case 'commit': for (const p of people) if (!p.inside) { p.say = pick(['✅', '👏', '🎉']); p.wait = Math.max(p.wait, 2); } burst(12); return say('✅ commit' + msg);
     case 'push': burst(60); for (const p of people) if (!p.inside) { p.say = pick(['🚀', '🎊', '🙌']); p.wait = Math.max(p.wait, 3); } return say('🚀 pushed' + msg);
-    case 'party': mode = 'party'; modeUntil = performance.now() + 25000; for (const p of people) { if (p.inside) leave(p); p.route = []; p.wait = rnd(0, 2); } return say('♪ party' + msg);
-    case 'nap': mode = 'nap'; modeUntil = performance.now() + 20000; for (const p of people) { p.route = []; p.wait = 0; } return say('z nap time' + msg);
+    case 'party': mode = 'party'; modeUntil = performance.now() + 25000; clearGroups(); for (const p of people) { if (p.inside) leave(p); p.route = []; p.wait = rnd(0, 2); } return say('♪ party' + msg);
+    case 'nap': mode = 'nap'; modeUntil = performance.now() + 20000; clearGroups(); for (const p of people) { p.route = []; p.wait = 0; } return say('z nap time' + msg);
     case 'wake': mode = 'normal'; for (const p of people) p.wait = rnd(0, 2); return say('wake up' + msg);
     default: you.say = '❓'; you.wait = Math.max(you.wait, 3); return say(ev.type + msg);
   }
