@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>pixeltown at work</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #0b0c10; color: #c8ccd4; font: 12px/1.4 ui-monospace, Menlo, monospace; overflow: hidden; }
+  body { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; }
+  canvas { image-rendering: pixelated; width: min(98vw, calc(94vh * 240 / 136)); aspect-ratio: 240 / 136; cursor: crosshair; }
+  #tip { position: fixed; pointer-events: none; background: #14161d; border: 1px solid #2a2e3a; padding: 3px 6px; display: none; white-space: nowrap; }
+  #bar { opacity: .55; display: flex; gap: 14px; }
+  #bar span:hover { opacity: 1; cursor: pointer; }
+</style>
+</head>
+<body>
+<canvas id="c" width="240" height="136"></canvas>
+<div id="bar"><span data-ev="commit">commit</span><span data-ev="push">push</span><span data-ev="incident">incident</span><span data-ev="allclear">all clear</span><span data-ev="party">party</span><span data-ev="nap">nap</span><span id="conn">…</span></div>
+<div id="tip"></div>
+<script>
+const cv = document.getElementById('c'), ctx = cv.getContext('2d'), tip = document.getElementById('tip');
+const T = 8, COLS = 30, ROWS = 17, W = COLS * T, H = ROWS * T;
+const rnd = (a, b) => a + Math.random() * (b - a), ri = (a, b) => Math.floor(rnd(a, b + 1)), pick = a => a[ri(0, a.length - 1)];
+const hash = s => { let h = 2166136261; for (const ch of s) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; };
+
+// ---------- map ----------
+// type, col, row, width (tiles); all buildings are 3 tiles tall
+const B = (type, c, r, w, hue = ri(0, 359)) => ({ type, c, r, w, h: 3, hue, lit: false });
+const buildings = [
+  B('office', 0, 3, 3), B('house', 3, 3, 2), B('house', 5, 3, 2), B('cafe', 8, 3, 3), B('house', 11, 3, 2), B('shop', 13, 3, 3),
+  B('house', 17, 3, 2), B('office', 19, 3, 4), B('house', 24, 3, 2), B('hall', 26, 3, 4),
+  B('house', 0, 7, 2), B('house', 3, 7, 2), B('shop', 6, 7, 3), B('cafe', 21, 7, 3), B('house', 25, 7, 2), B('house', 28, 7, 2),
+  B('shop', 0, 11, 3), B('house', 4, 11, 2), B('house', 6, 11, 2), B('office', 9, 11, 3), B('house', 13, 11, 2), B('house', 15, 11, 2),
+  B('shop', 18, 11, 3), B('house', 22, 11, 2), B('house', 24, 11, 2), B('office', 27, 11, 3),
+];
+const fountain = { c: 14, r: 7 };                         // 2x2
+const pond = { c: 2, r: 14, w: 3, h: 2 };
+const benches = [[11, 8], [18, 8], [9, 15], [20, 15], [26, 14]];
+const trees = [[7, 14], [12, 15], [16, 14], [23, 15], [28, 15], [0, 15], [16, 8], [12, 7]];
+const blocked = new Set();
+const key = (c, r) => c + ',' + r;
+for (const b of buildings) for (let c = b.c; c < b.c + b.w; c++) for (let r = b.r; r < b.r + b.h; r++) blocked.add(key(c, r));
+for (let c = 0; c < COLS; c++) for (let r = 0; r < 3; r++) blocked.add(key(c, r));   // sky
+for (let c = 0; c < 2; c++) for (let r = 0; r < 2; r++) blocked.add(key(fountain.c + c, fountain.r + r));
+for (let c = 0; c < pond.w; c++) for (let r = 0; r < pond.h; r++) blocked.add(key(pond.c + c, pond.r + r));
+for (const [c, r] of trees) blocked.add(key(c, r));
+const walkable = (c, r) => c >= 0 && r >= 0 && c < COLS && r < ROWS && !blocked.has(key(c, r));
+const doorOf = b => [b.c + Math.floor(b.w / 2), b.r + b.h];       // tile just below the door
+const walkTiles = []; for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) if (walkable(c, r)) walkTiles.push([c, r]);
+const bType = t => buildings.filter(b => b.type === t);
+
+function path(from, to) {                                    // BFS on tiles
+  const start = key(...from), goal = key(...to); if (start === goal) return [];
+  const prev = new Map([[start, null]]), q = [from];
+  while (q.length) {
+    const [c, r] = q.shift();
+    for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const n = [c + dc, r + dr], k = key(...n);
+      if (!walkable(...n) || prev.has(k)) continue;
+      prev.set(k, key(c, r)); if (k === goal) { const out = []; let cur = k; while (cur !== start) { out.unshift(cur.split(',').map(Number)); cur = prev.get(cur); } return out; }
+      q.push(n);
+    }
+  }
+  return null;
+}
+
+// ---------- people ----------
+const NAMES = ['ada', 'bo', 'cy', 'dot', 'eli', 'fay', 'gus', 'hal', 'ivy', 'jo', 'kit', 'lou', 'mo', 'nan', 'oz', 'pip'];
+const people = [];
+function addPerson(name, isYou = false) {
+  const h = hash(name), home = bType('house')[h % bType('house').length], [c, r] = doorOf(home);
+  const p = { name, isYou, home, c, r, x: c * T + 4, y: r * T + 4, route: [], act: 'idle', say: '', wait: rnd(0, 3), inside: null,
+    shirt: `hsl(${h % 360} 55% 50%)`, hair: pick(['#2b1b0e', '#5a3b1e', '#d8b060', '#1a1a1a', '#8a2a2a', '#eee']), hat: h % 4 === 0, frame: 0, flip: false, desc: 'standing around' };
+  people.push(p); return p;
+}
+const you = addPerson(new URLSearchParams(location.search).get('name') || 'you', true);
+NAMES.forEach(n => addPerson(n));
+
+// ---------- activities ----------
+let mode = 'normal', modeUntil = 0, sky = 0;                // normal | incident | party | nap
+const night = () => { const h = new Date().getHours() + new Date().getMinutes() / 60; return h < 6 || h > 21 ? 1 : h < 8 ? (8 - h) / 2 : h > 19 ? (h - 19) / 2 : 0; };
+function goTo(p, tile, act, desc, say = '') {
+  const pth = path([p.c, p.r], tile); if (!pth) return false;
+  p.route = pth; p.act = act; p.desc = desc; p.say = say; return true;
+}
+function enter(p, b, secs, desc) { p.inside = b; b.lit = true; p.wait = secs; p.desc = desc; p.act = 'inside'; }
+function choose(p) {
+  if (mode === 'incident') { const d = doorOf(p.home); if (p.c === d[0] && p.r === d[1]) return enter(p, p.home, 1e9, 'hiding at home'); return goTo(p, d, 'run', 'running home', '!'); }
+  if (mode === 'party') { const t = [ri(10, 19), ri(8, 9)]; if (walkable(...t)) goTo(p, t, 'walk', 'heading to the party', '♪'); p.wait = rnd(1, 3); return; }
+  if (mode === 'nap') { p.act = 'idle'; p.desc = 'napping'; p.say = 'z'; p.wait = 5; return; }
+  const n = night(), roll = Math.random();
+  if (n > 0.6 && roll < 0.6) { const d = doorOf(p.home); return (p.c === d[0] && p.r === d[1]) ? enter(p, p.home, rnd(20, 60), 'asleep at home') : goTo(p, d, 'walk', 'heading home'); }
+  if (roll < 0.22) return goTo(p, pick(walkTiles), 'walk', 'out for a walk');
+  if (roll < 0.36) { const b = pick(bType('cafe')); return goTo(p, doorOf(b), 'walk', 'going for coffee'); }
+  if (roll < 0.52) { const b = pick(bType('office')); return goTo(p, doorOf(b), 'walk', 'going to work'); }
+  if (roll < 0.62) { const b = pick(bType('shop')); return goTo(p, doorOf(b), 'walk', 'running an errand'); }
+  if (roll < 0.74) return goTo(p, pick(benches), 'walk', 'going to sit down');
+  if (roll < 0.82) return goTo(p, pick([[13, 9], [16, 9], [13, 6], [16, 6]]), 'walk', 'going to look at the fountain');
+  if (roll < 0.9) { const q = pick(people.filter(o => o !== p && o.act === 'idle' && !o.inside)); if (q) { q.wait = 8; q.desc = `chatting with ${p.name}`; q.say = '…'; p.chat = q; return goTo(p, [q.c, q.r + (walkable(q.c, q.r + 1) ? 1 : -1)], 'walk', `going to chat with ${q.name}`); } }
+  return goTo(p, doorOf(pick(bType('hall'))), 'walk', 'visiting town hall');
+}
+function arrived(p) {
+  const here = buildings.find(b => { const d = doorOf(b); return d[0] === p.c && d[1] === p.r; });
+  if (p.act === 'run') return enter(p, p.home, 1e9, 'hiding at home');
+  if (p.chat) { p.say = '…'; p.desc = `chatting with ${p.chat.name}`; p.chat = null; p.wait = 8; p.act = 'idle'; return; }
+  if (here && /coffee/.test(p.desc)) return enter(p, here, rnd(3, 6), 'inside the cafe');
+  if (here && /work/.test(p.desc)) return enter(p, here, rnd(15, 40), 'at work');
+  if (here && /errand/.test(p.desc)) return enter(p, here, rnd(3, 8), 'shopping');
+  if (here && /hall/.test(p.desc)) return enter(p, here, rnd(4, 10), 'inside town hall');
+  if (/sit/.test(p.desc)) { p.act = 'sit'; p.desc = 'sitting on a bench'; p.wait = rnd(8, 20); return; }
+  if (/fountain/.test(p.desc)) { p.desc = 'looking at the fountain'; p.say = '~'; p.wait = rnd(4, 8); p.act = 'idle'; return; }
+  p.act = 'idle'; p.desc = 'standing around'; p.wait = rnd(1, 5);
+}
+function leave(p) {
+  const b = p.inside; p.inside = null; if (!people.some(o => o.inside === b)) b.lit = false;
+  p.say = b.type === 'cafe' ? '☕' : b.type === 'shop' ? '▣' : ''; p.act = 'idle'; p.desc = 'just stepped outside'; p.wait = rnd(1, 3);
+}
+function tick(p, dt) {
+  p.frame += dt;
+  if (p.route.length) {
+    const [c, r] = p.route[0], tx = c * T + 4, ty = r * T + 4, sp = p.act === 'run' ? 48 : 14, dx = tx - p.x, dy = ty - p.y, L = Math.hypot(dx, dy);
+    if (dx) p.flip = dx < 0;
+    if (L <= sp * dt) { p.x = tx; p.y = ty; p.c = c; p.r = r; p.route.shift(); if (!p.route.length) arrived(p); }
+    else { p.x += dx / L * sp * dt; p.y += dy / L * sp * dt; }
+    return;
+  }
+  p.wait -= dt;
+  if (p.wait > 0) return;
+  p.say = '';
+  if (p.inside) { if (mode === 'incident') { p.wait = 2; return; } return leave(p); }
+  if (choose(p) === false) p.wait = 1;
+}
+
+// ---------- events ----------
+let ticker = '', tickerUntil = 0; const confetti = [];
+function say(msg, secs = 6) { ticker = msg; tickerUntil = performance.now() + secs * 1000; }
+function onEvent(ev) {
+  const msg = ev.msg ? `: ${ev.msg}` : '';
+  switch (ev.type) {
+    case 'hello': return;
+    case 'incident': mode = 'incident'; for (const p of people) { p.route = []; p.wait = rnd(0.5, 3); p.act = 'idle'; p.say = '!'; p.desc = 'panicking'; } return say('🔥 incident' + msg, 1e9);
+    case 'allclear': mode = 'normal'; for (const p of people) { p.wait = rnd(0, 3); if (p.inside) p.wait = rnd(1, 6); } return say('✅ all clear' + msg);
+    case 'commit': for (const p of people) if (!p.inside) { p.say = '✓'; p.wait = Math.max(p.wait, 2); } burst(12); return say('✓ commit' + msg);
+    case 'push': burst(60); for (const p of people) if (!p.inside) { p.say = '★'; p.wait = Math.max(p.wait, 3); } return say('★ pushed' + msg);
+    case 'party': mode = 'party'; modeUntil = performance.now() + 25000; for (const p of people) { if (p.inside) leave(p); p.route = []; p.wait = rnd(0, 2); } return say('♪ party' + msg);
+    case 'nap': mode = 'nap'; modeUntil = performance.now() + 20000; for (const p of people) { p.route = []; p.wait = 0; } return say('z nap time' + msg);
+    case 'wake': mode = 'normal'; for (const p of people) p.wait = rnd(0, 2); return say('wake up' + msg);
+    default: you.say = '?'; you.wait = Math.max(you.wait, 3); return say(ev.type + msg);
+  }
+}
+function burst(n) { for (let i = 0; i < n; i++) confetti.push({ x: fountain.c * T + 8, y: fountain.r * T, vx: rnd(-40, 40), vy: rnd(-90, -30), c: `hsl(${ri(0, 359)} 80% 60%)`, t: rnd(1.5, 3) }); }
+function connect() {
+  const es = new EventSource('/events');
+  es.onopen = () => conn.textContent = '● live';
+  es.onerror = () => conn.textContent = '○ reconnecting';
+  es.onmessage = e => onEvent(JSON.parse(e.data));
+}
+connect();
+document.querySelectorAll('#bar [data-ev]').forEach(el => el.onclick = () => fetch('/event?type=' + el.dataset.ev));
+
+// ---------- drawing ----------
+const px = (x, y, c, w = 1, h = 1) => { ctx.fillStyle = c; ctx.fillRect(Math.round(x), Math.round(y), w, h); };
+const shade = (l, n) => Math.max(8, l - 28 * n);
+function drawBuilding(b, n, now) {
+  const x = b.c * T, y = b.r * T, w = b.w * T, h = b.h * T;
+  const wall = { house: `hsl(${b.hue} 35% ${shade(58, n)}%)`, cafe: `hsl(25 45% ${shade(50, n)}%)`, shop: `hsl(${b.hue} 40% ${shade(62, n)}%)`, office: `hsl(215 15% ${shade(50, n)}%)`, hall: `hsl(40 30% ${shade(68, n)}%)` }[b.type];
+  px(x, y + 3, wall, w, h - 3);
+  const roof = mode === 'incident' && Math.sin(now / 150) > 0 ? '#ff3b3b' : b.type === 'office' ? `hsl(215 15% ${shade(30, n)}%)` : `hsl(${(b.hue + 160) % 360} 40% ${shade(32, n)}%)`;
+  px(x, y, roof, w, 4);
+  if (b.type === 'hall') { px(x + w / 2 - 2, y - 4, roof, 4, 4); px(x + w / 2 - 1, y - 3, '#fff', 2, 2); }
+  if (b.type === 'cafe') { px(x + 1, y + 6, '#c33', w - 2, 2); for (let i = 1; i < w - 2; i += 2) px(x + i, y + 8, '#eee', 1, 1); }
+  if (b.type === 'shop') for (let i = 0; i < w; i += 2) px(x + i, y + 6, i % 4 ? '#eee' : `hsl(${b.hue} 70% 45%)`, 2, 2);
+  const win = b.lit && (n > 0.3 || mode === 'incident') ? '#ffe28a' : n > 0.3 ? '#1a1c28' : '#a8dcff';
+  if (b.type === 'office') { for (let i = 2; i < w - 1; i += 3) for (let j = 6; j < h - 4; j += 4) px(x + i, y + j, win, 2, 2); }
+  else for (let i = 2; i < w - 2; i += 4) px(x + i, y + 10, win, 2, 2);
+  px(x + w / 2 - 1, y + h - 5, '#2a1a0e', 3, 5);                                     // door
+}
+function drawPerson(p, now) {
+  if (p.inside) return;
+  const x = Math.round(p.x) - 1, y = Math.round(p.y) - 5, moving = p.route.length > 0, step = moving && Math.floor(p.frame * (p.act === 'run' ? 16 : 7)) % 2;
+  const dance = mode === 'party' && !moving ? Math.round(Math.sin(now / 120 + p.x)) : 0;
+  const yy = y - Math.abs(dance);
+  if (p.act === 'sit') { px(x, yy + 4, p.shirt, 3, 2); px(x, yy + 1, '#f1c9a5', 3, 3); px(x, yy, p.hair, 3, 1); px(x, yy + 6, '#223', 3, 1); }
+  else { px(x + (step ? 0 : 1), yy + 5, '#223', 1, 1); px(x + (step ? 2 : 1), yy + 5, '#223', 1, 1); px(x, yy + 2, p.shirt, 3, 3); px(x, yy, '#f1c9a5', 3, 2); px(x, yy - 1, p.hair, 3, 1); }
+  if (p.hat) px(x - 1, yy - 2, '#333', 5, 1);
+  if (p.isYou) px(x + 1, yy - 5 + Math.round(Math.sin(now / 200)), '#fff', 1, 2);
+  if (p.say) { ctx.fillStyle = p.say === '!' ? '#ff5' : '#fff'; ctx.font = '6px monospace'; ctx.fillText(p.say, x + 3, yy - 2); }
+}
+function draw(now) {
+  const n = night();
+  ctx.fillStyle = mode === 'incident' ? `rgb(${70 + 40 * Math.sin(now / 120)},18,28)` : `rgb(${120 - 105 * n},${175 - 150 * n},${225 - 170 * n})`;
+  ctx.fillRect(0, 0, W, 3 * T);
+  if (n > 0.5) for (let i = 0; i < 25; i++) px((i * 97) % W, (i * 53) % 20, '#ddd');
+  px(W - 22, 6, n > 0.5 ? '#f0f0e0' : '#ffd34d', 6, 6);
+  px(0, 3 * T, `rgb(${74 - 40 * n},${128 - 70 * n},${56 - 30 * n})`, W, H - 3 * T);
+  for (const r of [6, 10]) { px(0, r * T, `rgb(${88 - 40 * n},${88 - 40 * n},${94 - 40 * n})`, W, T); for (let x = 2; x < W; x += 8) px(x, r * T + 3.5, '#cfc89a', 4, 1); }
+  px(9 * T, 7 * T, `rgb(${150 - 60 * n},${140 - 60 * n},${120 - 50 * n})`, 12 * T, 3 * T);                       // plaza
+  px(pond.c * T, pond.r * T, `rgb(${50 - 20 * n},${110 - 50 * n},${180 - 80 * n})`, pond.w * T, pond.h * T);
+  px(fountain.c * T + 1, fountain.r * T + 1, '#889', 14, 14); px(fountain.c * T + 3, fountain.r * T + 3, '#5ac', 10, 10);
+  px(fountain.c * T + 7, fountain.r * T + 3 + Math.round(Math.sin(now / 90)), '#cff', 2, 4);
+  for (const [c, r] of benches) { px(c * T + 1, r * T + 4, '#6b4a2a', 6, 2); px(c * T + 1, r * T + 6, '#4a3018', 1, 1); px(c * T + 6, r * T + 6, '#4a3018', 1, 1); }
+  for (const b of buildings) drawBuilding(b, n, now);
+  const drawables = [...people.map(p => ({ y: p.y, f: () => drawPerson(p, now) })), ...trees.map(([c, r]) => ({ y: r * T + 6, f: () => { px(c * T + 3, r * T + 2, '#5a3b1e', 2, 6); px(c * T, r * T - 3, `rgb(${34 - 15 * n},${104 - 50 * n},${44 - 20 * n})`, 8, 7); } }))];
+  drawables.sort((a, b) => a.y - b.y).forEach(d => d.f());
+  for (const f of confetti) px(f.x, f.y, f.c);
+  if (n > 0) { ctx.fillStyle = `rgba(10,12,40,${0.45 * n})`; ctx.fillRect(0, 0, W, H); }
+  if (now < tickerUntil) { ctx.fillStyle = '#000a'; ctx.fillRect(0, H - 9, W, 9); ctx.fillStyle = '#fff'; ctx.font = '7px monospace'; ctx.fillText(ticker.slice(0, 55), 2, H - 2); }
+}
+
+// ---------- loop ----------
+let last = performance.now();
+function loop(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  if ((mode === 'party' || mode === 'nap') && now > modeUntil) onEvent({ type: 'wake' });
+  for (const p of people) tick(p, dt);
+  for (let i = confetti.length - 1; i >= 0; i--) { const f = confetti[i]; f.vy += 120 * dt; f.x += f.vx * dt; f.y += f.vy * dt; if ((f.t -= dt) < 0) confetti.splice(i, 1); }
+  draw(now); requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+// ---------- hover ----------
+cv.onmousemove = e => {
+  const r = cv.getBoundingClientRect(), mx = (e.clientX - r.left) * W / r.width, my = (e.clientY - r.top) * H / r.height;
+  const p = people.filter(p => !p.inside).map(p => ({ p, d: Math.hypot(p.x - mx, p.y + 2 - my) })).sort((a, b) => a.d - b.d)[0];
+  const b = buildings.find(b => mx >= b.c * T && mx < (b.c + b.w) * T && my >= b.r * T && my < (b.r + b.h) * T);
+  if (p && p.d < 5) tip.textContent = `${p.p.name} — ${p.p.desc}`;
+  else if (b) { const ins = people.filter(q => q.inside === b).map(q => q.name); tip.textContent = `${b.type}${ins.length ? ' — inside: ' + ins.join(', ') : ''}`; }
+  else { tip.style.display = 'none'; return; }
+  tip.style.display = 'block'; tip.style.left = e.clientX + 12 + 'px'; tip.style.top = e.clientY + 12 + 'px';
+};
+cv.onmouseleave = () => tip.style.display = 'none';
+</script>
+</body>
+</html>
