@@ -8,7 +8,7 @@ import path from "node:path";
 import { startWatching } from "./watch.js";
 
 const PORT = process.env.PORT || 1337;
-const ROOTS = (process.env.PIXELTOWN_ROOTS || "~/src/github.com/Shopify:~/src/github.com/carmelal").split(":");
+const ROOTS = (process.env.PIXELTOWN_ROOTS || "~/src").split(":");
 const PUB = path.join(import.meta.dirname, "public");
 const MIME = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".json": "application/json" };
 const clients = new Set();

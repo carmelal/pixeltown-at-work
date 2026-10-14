@@ -1,6 +1,8 @@
-# Source from ~/.zshrc:   source ~/src/github.com/carmelal/pixeltown-at-work/hooks/pixeltown.zsh
-# Commands matching PIXELTOWN_CHECKS are reported to the town as checks: geese land when one starts,
-# leave when it passes, and menace the town when it fails. Harmless when the server is not running.
+# Source from ~/.zshrc:   source /path/to/pixeltown-at-work/hooks/pixeltown.zsh
+# Commands are matched by prefix. PIXELTOWN_CHECKS report a pass/fail result (tests, lint, typecheck, ci);
+# PIXELTOWN_LONG report when a command starts and stops (server, up, console, pr).
+# Add your own tooling's commands to either list. Harmless when the town is not running.
+# Optionally: export PIXELTOWN_ROOTS=~/src/work:~/src/personal   (folders whose subfolders are git repos)
 
 typeset -ga PIXELTOWN_CHECKS
 PIXELTOWN_CHECKS=(

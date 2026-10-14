@@ -1,6 +1,6 @@
 #!/bin/sh
 # Run any check and tell pixeltown how it went.
-#   check tests dev test            check lint dev style            check ci gh run watch
+#   check tests npm test            check lint npm run lint            check ci gh run watch
 # Geese land when the check starts, leave when it passes, and menace the town when it fails.
 name="$1"; shift
 post() { curl -s -m 1 -G "http://localhost:1337/event" --data-urlencode "type=$1" --data-urlencode "msg=$name" >/dev/null 2>&1 || true; }
