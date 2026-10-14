@@ -1,8 +1,7 @@
-// wiring: the frame loop, draw order, hover tooltips, dev bar
 import { T, W, H, SKY, SEASON, southern, night, weather, WICON, nowDate, clock, seasonOverridden, notices, reno, buildings, trees, docks, lamps, pond, LANE, BUS_STOP, mode, cursor } from './world.js';
 import { cv, ctx, hi, hctx, fitOverlay, label } from './canvas.js';
 import { people, tickPerson, picnics, tickPicnics, tickNotices } from './people.js';
-import { dogs, tickDog, ducks, tickDucks, squirrels, tickSquirrel, geese, tickGeese, geeseOnGround } from './animals.js';
+import { dogs, tickDog, ducks, tickDucks, squirrels, tickSquirrel, geese, tickGeese, gooseAirborne } from './animals.js';
 import { bus, tickBus, tickAmbient, particles, birds, van, carrier, tickMail, truck, tickTruck, workers, plane, parcels, tickAirDrop } from './town.js';
 import { onEvent, connect } from './events.js';
 import * as draw from './sprites.js';
@@ -28,7 +27,6 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 
-// everything on the ground is sorted by its bottom edge so nearer things cover farther ones; airborne things sort to the front
 const FRONT = 1e9;
 function render(now) {
   const n = night();
@@ -41,7 +39,7 @@ function render(now) {
     ...people.map(p => ({ y: p.y, f: () => draw.drawPerson(p, now) })),
     ...dogs.map(d => ({ y: d.y, f: () => draw.drawDog(d) })),
     ...squirrels.map(q => ({ y: q.y, f: () => draw.drawSquirrel(q) })),
-    ...(geese.state === 'away' ? [] : geese.birds.map(g => ({ y: (geese.state === 'landed' && !(geese.menace && g.hop && Math.hypot(g.gx - g.x, g.gy - g.y) > 4)) || (geese.state === 'landing' && Math.abs(g.gy - g.y) < 3) ? g.y + 1 : FRONT, f: () => draw.drawGoose(g, now) }))),
+    ...(geese.state === 'away' ? [] : geese.birds.map(g => ({ y: (geese.state === 'landed' && !gooseAirborne(g)) || (geese.state === 'landing' && Math.abs(g.gy - g.y) < 3) ? g.y + 1 : FRONT, f: () => draw.drawGoose(g, now) }))),
     ...ducks.filter(d => !(d.air && d.air.phase === 'gone')).map(d => ({ y: d.air ? FRONT : d.y, f: () => draw.drawDuck(d, now) })),
     { y: bus.state === 'rising' ? H + 1 : bus.y + 1, f: () => draw.drawBus(bus, n) },
     { y: van.state === 'rising' ? H + 2 : van.y + 1, f: () => draw.drawVan(van, n) },

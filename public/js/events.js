@@ -1,67 +1,72 @@
-// events from the server (and the dev bar) and how the town reacts to them
-import { rnd, pick } from './util.js';
-import { mode, weather, rollWeather, WICON, bType, doorOf, walkTiles, clock, SEASON, SEASONS, setSeason, fountain } from './world.js';
-import { people, clearGroups, leaveGroup, leave, send, sendToWork } from './people.js';
+import { rnd, ri, pick } from './util.js';
+import { mode, weather, rollWeather, WICON, bType, buildings, clock, SEASON, SEASONS, setSeason, fountain } from './world.js';
+import { people, clearGroups, leaveGroup, leave, sendToWork, coffeeRun, tidyUp, pinNotice, freePerson, INTENTS, bikeRide } from './people.js';
 import { geese, spawnGeese, flushGeese, startMenace } from './animals.js';
-import { bus, summonBus, burst, deliverMail } from './town.js';
-import { ri } from './util.js';
-import { coffeeRun, tidyUp, pinNotice, freePerson, INTENTS, bikeRide } from './people.js';
-import { startReno, endReno, airDrop } from './town.js';
-import { buildings } from './world.js';
-
-export function say() {}                                        // banners are gone; the dev status line is the only readout
+import { bus, summonBus, burst, deliverMail, startReno, endReno, airDrop } from './town.js';
 
 const outside = () => people.filter(p => !p.inside);
-// a share of the people outside react with an emoji for a moment
 function react(emojis, share = 1, hold = 2) { for (const p of outside()) if (Math.random() < share) { p.say = pick(emojis); p.wait = Math.max(p.wait, hold); } }
 function setMode(m, secs) { mode.current = m; mode.until = performance.now() + secs * 1000; clearGroups(); }
+const repoOf = ev => (ev.msg || '').split(/[:→]/)[0].trim();
 
 const HANDLERS = {
   hello: () => {},
-  commit: () => { fountain.sprayUntil = performance.now() + 5000; burst(16); },          // the fountain celebrates
+  // git
+  commit: () => { fountain.sprayUntil = performance.now() + 5000; burst(16); },
   push: () => { deliverMail(); react(['👋'], 0.3); },
-  merge: () => summonBus(ri(3, 5)),                                                       // a busload of visitors arrives
+  pull: () => deliverMail(pick(buildings)),
+  merge: () => summonBus(ri(3, 5)),
   checkout: () => bikeRide(ri(1, 4)),
-  pull: () => deliverMail(pick(buildings)),                                               // one big package for somebody
   rebase: () => tidyUp(),
+  reset: () => react(['😬'], 0.3),
   new: ev => pinNotice((ev.msg || '').split(': ').pop()),
   stash: () => { const p = freePerson(); if (p) INTENTS.pickflowers.go(p); },
-  up_start: () => airDrop(ri(4, 7)),
-  up_stop: () => {},
-  server_start: () => startReno(),
-  server_stop: () => endReno(),
-  stash_pop: () => { const p = freePerson(); if (p) INTENTS.picnic.go(p); },                                                                 // sweeping and watering (shovelling in winter)
-  reset: (ev, msg) => { react(['😬'], 0.3); say('⏪ reset' + msg); },
-  editing: ev => {                                               // light an office and send a few idle people to it
-    // about half of everyone outside heads for an office (spread across all of them), unless mid-ride or already at work
-    const offices = bType('office'); let k = 0;
-    for (const p of outside()) if (!p.bike && p.intent !== 'work' && Math.random() < 0.55 && k < 9) { k++; p.wait = 0; p.route = []; if (p.group) leaveGroup(p); const b = pick(offices); b.lit = true; sendToWork(p, b, 'heading in to work'); p.say = '💻'; }
-    coffeeRun.until = performance.now() + 40000;                // while you are editing, office workers trickle out for coffee and back
+  stash_pop: () => { const p = freePerson(); if (p) INTENTS.picnic.go(p); },
+  // working
+  editing: () => {
+    const offices = bType('office');
+    let k = 0;
+    for (const p of outside()) {
+      if (p.bike || p.intent === 'work' || Math.random() >= 0.55 || k >= 9) continue;
+      k++; p.wait = 0; p.route = [];
+      if (p.group) leaveGroup(p);
+      const b = pick(offices); b.lit = true;
+      sendToWork(p, b, 'heading in to work'); p.say = '💻';
+    }
+    coffeeRun.until = performance.now() + 40000;
   },
   idle: () => { coffeeRun.until = 0; for (const p of people) if (p.inside && p.inside.type === 'office' && Math.random() < 0.7) { p.wait = Math.min(p.wait, rnd(1, 5)); p.urge = 'break'; } },
-  gathering: (ev, msg) => { setMode('gathering', 25); for (const p of people) { if (p.inside === bus) continue; if (p.inside) leave(p); p.route = []; p.wait = rnd(0, 2); } say('🏛️ town gathering' + msg); },
-  nap: (ev, msg) => { setMode('nap', 20); for (const p of people) { if (p.inside === bus) continue; p.route = []; p.wait = 0; } say('💤 nap time' + msg); },
-  wake: (ev, msg) => { mode.current = 'normal'; for (const p of people) if (p.inside !== bus) p.wait = rnd(0, 2); say('wake up' + msg); },
-  weather: ev => { rollWeather(ev.msg && WICON[ev.msg] ? ev.msg : null); say(`${WICON[weather.type]} ${weather.type}`); },
-  bus: () => summonBus(),
-  season: ev => setSeason(ev.msg === 'reset' ? 'reset' : SEASONS.includes(ev.msg) ? ev.msg : SEASONS[(SEASONS.indexOf(SEASON) + 1) % 4]),   // cycle seasons (msg: name, or 'reset')
-  time: ev => { clock.offsetHours = ev.msg === 'reset' ? 0 : (clock.offsetHours + (Number(ev.msg) || 3)) % 24; },   // advance the town clock (msg: hours, or 'reset')
-  geese: () => { if (geese.state === 'away') spawnGeese(true); },
-  // checks (tests, lint, typecheck, ci): geese arrive when one starts, leave when it passes, turn on the town when it fails
   check_start: ev => { geese.check = ev.msg || 'tests'; if (geese.state === 'away') spawnGeese(true); },
   check_pass: () => flushGeese(),
   check_fail: ev => { geese.check = ev.msg || 'tests'; if (geese.state === 'away') spawnGeese(true); startMenace(); setTimeout(flushGeese, 20000); },
+  server_start: () => startReno(),
+  server_stop: () => endReno(),
+  up_start: () => airDrop(ri(4, 7)),
+  up_stop: () => {},
+  // town
+  gathering: () => { setMode('gathering', 25); for (const p of people) { if (p.inside === bus) continue; if (p.inside) leave(p); p.route = []; p.wait = rnd(0, 2); } },
+  nap: () => { setMode('nap', 20); for (const p of people) if (p.inside !== bus) { p.route = []; p.wait = 0; } },
+  wake: () => { mode.current = 'normal'; for (const p of people) if (p.inside !== bus) p.wait = rnd(0, 2); },
+  weather: ev => rollWeather(WICON[ev.msg] ? ev.msg : null),
+  bus: () => summonBus(),
+  geese: () => { if (geese.state === 'away') spawnGeese(true); },
+  season: ev => setSeason(ev.msg === 'reset' ? 'reset' : SEASONS.includes(ev.msg) ? ev.msg : SEASONS[(SEASONS.indexOf(SEASON) + 1) % 4]),
+  time: ev => { clock.offsetHours = ev.msg === 'reset' ? 0 : (clock.offsetHours + (Number(ev.msg) || 3)) % 24; },
 };
 
 let statusEl = null, connected = false, lastSignal = '';
 function showStatus() { if (statusEl) statusEl.textContent = `${connected ? '●' : '○'} ${lastSignal || (connected ? 'connected, waiting for signals' : 'reconnecting')}`; }
 
 export function onEvent(ev) {
-  const msg = ev.msg ? `: ${ev.msg}` : '';
-  if (ev.type !== 'hello') { const t = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); const repo = (ev.msg || '').split(/[:→]/)[0].trim(); lastSignal = `${ev.type.replace('_', ' ')}${repo ? ' · ' + repo : ''} (${t})`; showStatus(); }
+  if (ev.type !== 'hello') {
+    const t = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), repo = repoOf(ev);
+    lastSignal = `${ev.type.replace('_', ' ')}${repo ? ' · ' + repo : ''} (${t})`;
+    showStatus();
+  }
   const h = HANDLERS[ev.type];
-  if (h) return h(ev, msg);
-  const p = pick(people.filter(p => !p.inside)) || people[0]; p.say = '❓️'; p.wait = Math.max(p.wait, 3); say(ev.type + msg);
+  if (h) return h(ev);
+  const p = pick(outside()) || people[0];
+  p.say = '❓️'; p.wait = Math.max(p.wait, 3);
 }
 
 export function connect(el) {
