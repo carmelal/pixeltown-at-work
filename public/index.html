@@ -10,18 +10,29 @@
   canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
   #c { image-rendering: pixelated; cursor: crosshair; }
   #hi { pointer-events: none; }
-  #bar { opacity: .55; display: flex; gap: 14px; width: min(98vw, calc(94vh * 240 / 136)); }
+  #bar { opacity: .7; display: flex; gap: 14px; width: min(98vw, calc(94vh * 240 / 136)); }
   #conn { margin-left: auto; white-space: nowrap; }
   #bar.hidden { display: none; }
-  #bar span:hover { opacity: 1; cursor: pointer; }
+  #bar details { position: relative; }
+  #bar summary { cursor: pointer; list-style: none; }
+  #bar summary::-webkit-details-marker { display: none; }
+  #bar summary::after { content: ' ▴'; opacity: .6; }
+  #bar details[open] summary::after { content: ' ▾'; }
+  #bar .menu { position: absolute; left: 0; bottom: 100%; margin-bottom: 4px; background: #14161d; border: 1px solid #2a2e3a; z-index: 2; display: flex; flex-direction: column; }
+  #bar .menu span { padding: 3px 10px; white-space: nowrap; }
+  #bar .menu span:hover, #bar summary:hover { cursor: pointer; color: #fff; background: #1e2130; }
   #tip { position: fixed; pointer-events: none; background: #14161d; border: 1px solid #2a2e3a; padding: 3px 6px; display: none; white-space: nowrap; }
 </style>
 </head>
 <body>
 <div id="stage"><canvas id="c" width="240" height="136"></canvas><canvas id="hi"></canvas></div>
 <div id="bar">
-  <span data-ev="commit">commit</span><span data-ev="push">push</span><span data-ev="merge">merge</span><span data-ev="pull">pull</span><span data-ev="rebase">rebase</span><span data-ev="editing">editing</span><span data-ev="idle">idle</span><span data-ev="gathering">gathering</span><span data-ev="nap">nap</span>
-  <span data-ev="weather">weather</span><span data-ev="time">time +3h</span><span data-ev="time" data-msg="reset">time reset</span><span data-ev="season">season</span><span data-ev="season" data-msg="reset">season reset</span><span data-ev="bus">bus</span><span data-ev="check_start" data-msg="tests">check start</span><span data-ev="check_pass">check pass</span><span data-ev="check_fail" data-msg="tests">check fail</span><span id="conn">…</span>
+  <details><summary>git</summary><div class="menu"><span data-ev="commit">commit</span><span data-ev="push">push</span><span data-ev="merge">merge</span><span data-ev="pull">pull</span><span data-ev="rebase">rebase</span><span data-ev="editing" data-msg="dev">editing</span><span data-ev="idle">idle</span></div></details>
+  <details><summary>checks</summary><div class="menu"><span data-ev="check_start" data-msg="tests">start</span><span data-ev="check_pass">pass</span><span data-ev="check_fail" data-msg="tests">fail</span></div></details>
+  <details><summary>time</summary><div class="menu"><span data-ev="time">+3h</span><span data-ev="time" data-msg="reset">reset</span></div></details>
+  <details><summary>season</summary><div class="menu"><span data-ev="season">next</span><span data-ev="season" data-msg="reset">reset</span></div></details>
+  <details><summary>town</summary><div class="menu"><span data-ev="gathering">gathering</span><span data-ev="nap">nap</span><span data-ev="weather">weather</span><span data-ev="bus">bus</span></div></details>
+  <span id="conn">…</span>
 </div>
 <div id="tip"></div>
 <script type="module" src="/js/main.js"></script>

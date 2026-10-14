@@ -10,7 +10,8 @@ import * as draw from './sprites.js';
 const params = new URLSearchParams(location.search);
 const tip = document.getElementById('tip'), bar = document.getElementById('bar');
 if (params.get('dev') !== 'true') bar.classList.add('hidden');
-bar.querySelectorAll('[data-ev]').forEach(el => el.onclick = () => fetch('/event?type=' + el.dataset.ev + (el.dataset.msg ? '&msg=' + el.dataset.msg : '')));
+bar.querySelectorAll('[data-ev]').forEach(el => el.onclick = () => { fetch('/event?type=' + el.dataset.ev + (el.dataset.msg ? '&msg=' + el.dataset.msg : '')); el.closest('details')?.removeAttribute('open'); });
+document.addEventListener('click', e => { if (!bar.contains(e.target)) bar.querySelectorAll('details[open]').forEach(d => d.removeAttribute('open')); });
 connect(document.getElementById('conn'));
 
 // ---------- frame ----------
