@@ -3,13 +3,13 @@ import { T, W, H, SKY, SEASON, southern, night, weather, WICON, nowDate, clock, 
 import { cv, ctx, hi, hctx, fitOverlay, label } from './canvas.js';
 import { people, tickPerson, picnics, tickPicnics, tickNotices } from './people.js';
 import { dogs, tickDog, ducks, tickDucks, squirrels, tickSquirrel, geese, tickGeese, geeseOnGround } from './animals.js';
-import { bus, tickBus, tickAmbient, particles, birds, van, carrier, tickMail, truck, tickTruck, workers } from './town.js';
+import { bus, tickBus, tickAmbient, particles, birds, van, carrier, tickMail, truck, tickTruck, workers, plane, parcels, tickAirDrop } from './town.js';
 import { onEvent, connect } from './events.js';
 import * as draw from './sprites.js';
 
 const params = new URLSearchParams(location.search);
 const tip = document.getElementById('tip'), bar = document.getElementById('bar');
-if (params.get('dev') !== 'true') bar.classList.add('hidden');
+if (params.get('dev') === 'true') bar.classList.add('dev');
 bar.querySelectorAll('[data-ev]').forEach(el => el.onclick = () => { fetch('/event?type=' + el.dataset.ev + (el.dataset.msg ? '&msg=' + el.dataset.msg : '')); el.closest('details')?.removeAttribute('open'); });
 document.addEventListener('click', e => { if (!bar.contains(e.target)) bar.querySelectorAll('details[open]').forEach(d => d.removeAttribute('open')); });
 bar.querySelectorAll('details').forEach(d => d.addEventListener('toggle', () => { if (d.open) bar.querySelectorAll('details[open]').forEach(o => { if (o !== d) o.removeAttribute('open'); }); }));
@@ -23,7 +23,7 @@ function frame(now) {
   for (const p of people) tickPerson(p, dt); tickPicnics(); tickNotices();
   for (const d of dogs) tickDog(d, dt);
   for (const q of squirrels) tickSquirrel(q, dt);
-  tickGeese(dt); tickDucks(dt); tickBus(dt); tickMail(dt); tickTruck(dt); tickAmbient(dt);
+  tickGeese(dt); tickDucks(dt); tickBus(dt); tickMail(dt); tickTruck(dt); tickAirDrop(dt); tickAmbient(dt);
   render(now);
   requestAnimationFrame(frame);
 }
@@ -49,6 +49,8 @@ function render(now) {
     ...(reno.pileTile ? [{ y: reno.pileTile[1] * T + 7, f: () => draw.drawPile(reno.pileTile, reno.pile) }] : []),
     ...(carrier.active ? [{ y: carrier.y, f: () => draw.drawPerson(carrier, now) }] : []),
     ...workers.map(w => ({ y: w.y, f: () => draw.drawPerson(w, now) })),
+    ...parcels.map(p => ({ y: p.chute ? FRONT : p.y + 1, f: () => draw.drawParcel(p) })),
+    { y: FRONT, f: () => draw.drawPlane(plane) },
     ...trees.map(([c, r]) => ({ y: r * T + 6, f: () => draw.drawTree(c, r, n) })),
     ...docks.map(d => ({ y: d.r * T + 2, f: () => draw.drawDock(d) })),
     ...picnics.map(b => ({ y: b.y - 3, f: () => draw.drawBlanket(b) })),
@@ -68,6 +70,7 @@ function hitTargets() {
   for (const p of people) if (!p.inside) t.push({ x: p.x, y: p.y + 2, r: 5, text: `${p.name}${p.visitor ? ' (visiting)' : ''} — ${p.desc}` });
   for (const d of dogs) t.push({ x: d.x, y: d.y, r: 5, text: `${d.name} (${d.temperament}) — ${d.desc}` });
   if (carrier.active) t.push({ x: carrier.x, y: carrier.y + 2, r: 5, text: `mail carrier — ${carrier.desc}` });
+  for (const q of parcels) t.push({ x: q.x, y: q.y - 2, r: 5, text: q.chute ? 'parcel — coming down' : dogs.some(d => d.parcel === q) ? `parcel — ${dogs.find(d => d.parcel === q).name} is going for it` : q.claimed ? `parcel — ${q.claimed.name} is on the way` : 'parcel — waiting to be collected' });
   for (const w of workers) t.push({ x: w.x, y: w.y + 2, r: 5, text: `${w.name} (crew) — ${w.desc}` });
   if (geese.state !== 'away') for (const g of geese.birds) t.push({ x: g.x, y: g.y, r: 5, text: `canada goose — ${geese.menace ? `${geese.check} failed; on the warpath` : geese.state === 'landed' ? `waiting on ${geese.check || 'the checks'}` : geese.state === 'leaving' ? 'leaving in a huff' : 'flying in'}` });
   for (const q of squirrels) if (!q.hidden) t.push({ x: q.x, y: q.y, r: 4, text: 'squirrel — making a run for it' });

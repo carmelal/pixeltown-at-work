@@ -25,7 +25,7 @@ PIXELTOWN_CHECKS=(
 typeset -ga PIXELTOWN_LONG
 PIXELTOWN_LONG=(
   'dev server:server'
-  'dev up:server'
+  'dev up:up'
   'bin/rails server:server'
   'npm run dev:server'
   'pnpm dev:server'

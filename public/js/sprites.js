@@ -18,7 +18,8 @@ const FACADE = {
     px(x + w / 2 - 3, y - 7, roof, 6, 7); px(x + w / 2 - 2, y - 6, '#f4f4ee', 4, 4);
     const hr = (hourNow() % 12) / 12 * Math.PI * 2, mn = (nowDate().getMinutes() / 60) * Math.PI * 2, cx = x + w / 2, cy = y - 4;
     px(cx - 0.5 + Math.sin(hr), cy - 0.5 - Math.cos(hr), '#222'); px(cx - 0.5 + Math.sin(mn) * 1.6, cy - 0.5 - Math.cos(mn) * 1.6, '#222');
-    for (let i = 0; i < Math.min(notices.length, 6); i++) { const nx = x + 2 + (i % 3) * 5, ny = y + h - 13 + Math.floor(i / 3) * 5; px(nx, ny, '#f8f6ee', 4, 4); px(nx + 1, ny + 1, '#889', 2, 1); px(nx + 1, ny + 2, '#889', 2, 1); px(nx + 1, ny, '#d33', 1, 1); }   // pinned notices
+    const slots = [x + 4, x + 9, x + w - 13, x + w - 8];                                                        // a strip between the windows and the door, either side of the entrance
+    for (let i = 0; i < Math.min(notices.length, slots.length); i++) { const nx = slots[i], ny = y + h - 9; px(nx, ny, '#f8f6ee', 4, 4); px(nx + 1, ny + 1, '#889', 2, 1); px(nx + 1, ny + 2, '#889', 2, 1); px(nx + 1, ny, '#d33', 1, 1); }
   },
   cafe(x, y, w) { px(x + 1, y + 6, '#c33', w - 2, 2); for (let i = 1; i < w - 2; i += 2) px(x + i, y + 8, '#eee', 1, 1); },
   shop(x, y, w, h, n, now, roof, b) { for (let i = 0; i < w; i += 2) px(x + i, y + 6, i % 4 ? '#eee' : `hsl(${b.hue} 70% 45%)`, 2, 2); },
@@ -166,6 +167,15 @@ export function drawTruck(v, n) {
   if (v.loaded) { for (let i = 0; i < 6; i++) px(bed + (i % 3) * 3, y + 3 - Math.floor(i / 3) * 2, i % 2 ? '#c9a060' : '#a66', 3, 2); for (let i = 0; i < 4; i++) px(bed + 1 + i * 3, y - 2, '#f5c400', 2, 1); }   // hard hats peeking over the load
   px(x + 1, y + v.h - 2, '#444', 3, 2); px(x + v.w - 5, y + v.h - 2, '#444', 3, 2);
 }
+export function drawPlane(pl) {
+  if (!pl.active) return; const x = Math.round(pl.x), f = pl.dir, y = 5;
+  px(x - 6, y, '#eee', 12, 2); px(x + f * 6, y, '#eee', 2, 1); px(x - f * 5, y - 2, '#d33', 1, 3); px(x - 2, y - 1, '#eee', 4, 1); px(x + f * 3, y, '#9fd8ff', 2, 1);
+}
+export function drawParcel(p) {
+  const x = Math.round(p.x), y = Math.round(p.y);
+  if (p.chute) { px(x - 3, y - 9, '#e8a040', 7, 2); px(x - 2, y - 11, '#e8a040', 5, 2); px(x - 1, y - 12, '#f4c060', 3, 1); px(x - 3, y - 7, 'rgba(255,255,255,0.5)', 1, 4); px(x + 3, y - 7, 'rgba(255,255,255,0.5)', 1, 4); }
+  px(x - 2, y - 3, '#b8863b', 5, 4); px(x - 2, y - 1, '#d9a65a', 5, 1); px(x, y - 3, '#d9a65a', 1, 4);
+}
 export function drawBlanket(b) {                                                 // red and white check with a basket
   const x = Math.round(b.x) - 6, y = Math.round(b.y) - 2;
   for (let i = 0; i < 12; i++) for (let j = 0; j < 5; j++) px(x + i, y + j, ((i >> 1) + (j >> 1)) % 2 ? '#e44' : '#fff', 1, 1);   // 2x2 checks
@@ -271,6 +281,7 @@ export function drawParticle(f) {
   else if (f.k === 'smoke') px(f.x, f.y, `rgba(200,200,210,${clamp(f.t / 3, 0, 0.7)})`, 2, 2);
   else if (f.k === 'leaf') px(f.x, f.y, '#c84');
   else if (f.k === 'splash') px(f.x, f.y, 'rgba(210,235,255,0.9)');
+  else if (f.k === 'shred') px(f.x, f.y, Math.random() < 0.5 ? '#b8863b' : '#d9a65a', 1, 1);
   else if (f.k === 'petal') px(f.x, f.y, '#f9c');
   else px(f.x, f.y, f.c);
 }

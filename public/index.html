@@ -12,7 +12,8 @@
   #hi { pointer-events: none; }
   #bar { opacity: .7; display: flex; gap: 14px; width: min(98vw, calc(94vh * 240 / 136)); }
   #conn { margin-left: auto; white-space: nowrap; }
-  #bar.hidden { display: none; }
+  #bar:not(.dev) details { display: none; }
+  #bar { background: #000; padding: 4px 8px; box-sizing: border-box; min-height: 22px; }
   #bar details { position: relative; }
   #bar summary { cursor: pointer; list-style: none; }
   #bar summary::-webkit-details-marker { display: none; }
@@ -27,9 +28,9 @@
 <body>
 <div id="stage"><canvas id="c" width="240" height="136"></canvas><canvas id="hi"></canvas></div>
 <div id="bar">
-  <details><summary>git</summary><div class="menu"><span data-ev="commit">commit</span><span data-ev="push">push</span><span data-ev="merge">merge</span><span data-ev="pull">pull</span><span data-ev="rebase">rebase</span><span data-ev="editing" data-msg="dev">editing</span><span data-ev="idle">idle</span><span data-ev="new" data-msg="x: feature/thing">new</span><span data-ev="stash">stash</span><span data-ev="stash_pop">stash pop</span></div></details>
+  <details><summary>git</summary><div class="menu"><span data-ev="commit">commit</span><span data-ev="push">push</span><span data-ev="merge">merge</span><span data-ev="pull">pull</span><span data-ev="rebase">rebase</span><span data-ev="checkout">checkout</span><span data-ev="editing" data-msg="dev">editing</span><span data-ev="idle">idle</span><span data-ev="new" data-msg="x: feature/thing">new</span><span data-ev="stash">stash</span><span data-ev="stash_pop">stash pop</span></div></details>
   <details><summary>checks</summary><div class="menu"><span data-ev="check_start" data-msg="tests">start</span><span data-ev="check_pass">pass</span><span data-ev="check_fail" data-msg="tests">fail</span></div></details>
-  <details><summary>server</summary><div class="menu"><span data-ev="server_start">start</span><span data-ev="server_stop">stop</span></div></details>
+  <details><summary>server</summary><div class="menu"><span data-ev="server_start">start</span><span data-ev="server_stop">stop</span><span data-ev="up_start">dev up</span></div></details>
   <details><summary>time</summary><div class="menu"><span data-ev="time">+3h</span><span data-ev="time" data-msg="reset">reset</span></div></details>
   <details><summary>season</summary><div class="menu"><span data-ev="season">next</span><span data-ev="season" data-msg="reset">reset</span></div></details>
   <details><summary>town</summary><div class="menu"><span data-ev="gathering">gathering</span><span data-ev="nap">nap</span><span data-ev="weather">weather</span><span data-ev="bus">bus</span></div></details>

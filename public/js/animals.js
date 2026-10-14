@@ -2,7 +2,7 @@
 import { rnd, ri, pick, clamp, moveToward } from './util.js';
 import { T, W, H, tileX, tileY, SEASON, hourNow, night, wet, pond, trees, walkTiles, pondSide, spotsAround, nearestTile, path, routeTo, followRoute, cursor, doorOf, bType } from './world.js';
 import { people, groups, send, idle, picnics } from './people.js';
-import { particles, splash, carrier } from './town.js';
+import { particles, splash, carrier, parcels, takeParcel } from './town.js';
 
 // ---------- dogs ----------
 // temperament drives behaviour: lazy dogs lie around, loyal ones stick to people, wild ones chase, social ones hang around chats
@@ -11,7 +11,7 @@ const DOGS = [
   { name: 'biscuit', coat: '#c9a060', marking: 'none', size: 2, ears: 'floppy', collar: '#d33', temperament: 'lazy', loyalty: 0.3, curiosity: 0.0, laziness: 0.6 },
   { name: 'pepper', coat: '#8a8a90', marking: 'spots', size: 1, ears: 'pointy', collar: null, temperament: 'wild', loyalty: 0.3, curiosity: 0.55, laziness: 0.02 },
   { name: 'rufus', coat: '#8a5a2b', marking: 'none', size: 2, ears: 'pointy', collar: '#2a4', temperament: 'social', loyalty: 0.6, curiosity: 0.1, laziness: 0.15 },
-  { name: 'olive', coat: '#e8e0d0', marking: 'spots', size: 2, ears: 'floppy', collar: '#a3d', temperament: 'lazy', loyalty: 0.5, curiosity: 0.05, laziness: 0.45 },
+  { name: 'olive', coat: '#e8e0d0', marking: 'spots', size: 2, ears: 'floppy', collar: '#a3d', temperament: 'social', loyalty: 0.5, curiosity: 0.2, laziness: 0.1 },
 ];
 const PLAYFUL = { wild: 0.35, social: 0.3, loyal: 0.15, lazy: 0.03 };
 export const dogs = DOGS.map(d => { const [c, r] = pick(walkTiles); return { ...d, play: null, playUntil: 0, c, r, x: tileX(c), y: tileY(r), route: [], wait: rnd(0, 3), follow: null, chase: null, swim: null, lying: false, say: '', flip: false, frame: 0, desc: 'sniffing around' }; });
@@ -40,7 +40,7 @@ export function tickDog(d, dt) {
     const b = picnics[0]; if (path([d.c, d.r], b.tile)) { d.chase = null; d.play = null; d.follow = null; d.swim = null; d.lying = false; d.picnic = b; d.route = path([d.c, d.r], b.tile); d.desc = 'sprinting to the picnic'; d.say = '🥺'; d.wait = 0; }
   }
   if (d.route.length) {
-    followRoute(d, d.chase ? 44 : d.picnic ? 40 : d.play ? 36 : 20 + d.size * 2, dt, () => { d.wait = d.chase ? 0 : d.play ? rnd(0.2, 0.6) : rnd(1, 4); });
+    followRoute(d, d.chase || d.parcel ? 44 : d.picnic ? 40 : d.play ? 36 : 20 + d.size * 2, dt, () => { d.wait = d.chase ? 0 : d.play ? rnd(0.2, 0.6) : rnd(1, 4); });
     // mid-chase: squirrel flees when the dog gets close
     if (d.chase && d.chase.kind === 'squirrel' && !d.chase.hidden && Math.hypot(d.chase.x - d.x, d.chase.y - d.y) < 10) { hideSquirrel(d.chase); d.say = '🐿️'; d.chase = null; d.route = []; d.wait = 2.5; d.desc = 'lost the squirrel'; }
     return;
@@ -70,6 +70,8 @@ export function tickDog(d, dt) {
   const lazyNow = d.laziness * (SEASON === 'summer' ? 1.4 : 1) * (hourNow() > 13 && hourNow() < 16 ? 1.5 : 1);
   if (Math.random() < lazyNow) { d.lying = true; d.follow = null; d.desc = pick(['lying in the sun', 'having a lie down', 'not moving for anyone']); d.wait = rnd(8, 25); if (Math.random() < 0.5) d.say = '💤'; return; }
   if (geese.menace) { d.chase = null; d.follow = null; d.play = null; const t = pick(trees), sp = spotsAround(t[0], t[1]); if (sp.length && Math.hypot(t[0] - d.c, t[1] - d.r) > 1.5) { d.route = path([d.c, d.r], pick(sp)) || []; d.desc = 'getting away from the geese'; } else { d.lying = true; d.desc = 'cowering under a tree'; d.wait = rnd(3, 6); } d.say = '😨'; return; }
+  if (d.parcel) { const q = d.parcel; d.parcel = null; if (parcels.includes(q)) { takeParcel(q); d.say = pick(['📦', '😆', '🐾']); d.desc = 'shredding a parcel'; d.wait = rnd(3, 6); for (let i = 0; i < 10; i++) particles.push({ k: 'shred', x: d.x + rnd(-3, 3), y: d.y - 2, vx: rnd(-25, 25), vy: rnd(-50, -10), t: rnd(0.8, 1.6) }); } else { d.say = '😕'; d.wait = 1.5; } return; }
+  if (parcels.some(q => !q.chute) && Math.random() < (d.temperament === 'lazy' ? 0.1 : 0.45)) { const q = pick(parcels.filter(q => !q.chute)); if (path([d.c, d.r], q.tile)) { d.parcel = q; d.chase = null; d.follow = null; d.route = path([d.c, d.r], q.tile); d.desc = 'going for that box'; d.say = '❗️'; return; } }
   // a picnic is irresistible: go sit on the blanket and beg
   if (d.picnic) { const b = d.picnic; d.picnic = null; if (picnics.includes(b)) { d.lying = true; d.follow = null; d.desc = 'begging at the picnic'; d.say = pick(['🥺', '🦴', '👀']); d.wait = rnd(8, 15); return; } }
   if (picnics.length && Math.random() < (d.temperament === 'lazy' ? 0.15 : 0.35)) { const b = pick(picnics); if (path([d.c, d.r], b.tile)) { d.picnic = b; d.follow = null; d.route = path([d.c, d.r], b.tile); d.desc = 'heading for the picnic'; d.say = '👃'; return; } }

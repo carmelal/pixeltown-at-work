@@ -1,6 +1,6 @@
 // the bus, ambient life (birds, weather particles, leaves, smoke) and confetti
 import { rnd, ri, pick, hash, moveToward } from './util.js';
-import { T, W, H, SKY, SEASON, night, wet, weather, rollWeather, buildings, trees, fountain, LANE, BUS_STOP, tileX, tileY, doorOf, path, followRoute, reno, siteSpots } from './world.js';
+import { T, W, H, SKY, SEASON, night, wet, weather, rollWeather, buildings, trees, fountain, LANE, BUS_STOP, tileX, tileY, doorOf, path, followRoute, reno, siteSpots, walkTiles } from './world.js';
 import { people, leaveGroup, addVisitor } from './people.js';
 
 // ---------- bus: climbs out of the bottom edge at the lane's curve, turns right, stops under the shelter, leaves to the right ----------
@@ -92,6 +92,23 @@ function arriveWorker(w) {
   if (w.state === 'carry') { reno.scaffold = Math.min(1, reno.scaffold + 1 / 6); w.state = 'work'; w.act = 'work'; w.say = pick(['🔨', '🔧']); w.desc = `renovating the ${reno.site.type}`; w.flip = w.x > (reno.site.c + reno.site.w / 2) * T; w.wait = rnd(3, 8); return; }
 }
 
+// ---------- air drop: a plane crosses the sky and parcels drift down on parachutes; people go and collect them ----------
+export const plane = { active: false, x: 0, dir: 1, drops: 0, nextDrop: 0 };
+export const parcels = [];                                   // { x, y, ty, chute, taken }
+export function airDrop(n = 5) { if (plane.active) return; plane.active = true; plane.dir = Math.random() < 0.5 ? 1 : -1; plane.x = plane.dir > 0 ? -20 : W + 20; plane.drops = n; plane.nextDrop = rnd(0.5, 1.2); }
+export function tickAirDrop(dt) {
+  if (plane.active) {
+    plane.x += plane.dir * 45 * dt;
+    if (plane.drops > 0 && (plane.nextDrop -= dt) <= 0 && plane.x > 20 && plane.x < W - 20) {
+      const t = pick(walkTiles.filter(([c, r]) => Math.abs(tileX(c) - plane.x) < 30 && r >= 6));
+      if (t) { parcels.push({ x: plane.x, y: 6, tx: tileX(t[0]), ty: tileY(t[1]), tile: t, chute: true, taken: false, sway: rnd(0, 6) }); plane.drops--; plane.nextDrop = rnd(0.6, 1.4); }
+    }
+    if (plane.x < -30 || plane.x > W + 30) plane.active = false;
+  }
+  for (const p of parcels) if (p.chute) { p.sway += dt * 3; p.x += (p.tx - p.x) * dt * 1.5 + Math.sin(p.sway) * 6 * dt; p.y += 14 * dt; if (p.y >= p.ty) { p.y = p.ty; p.x = p.tx; p.chute = false; } }
+}
+export function takeParcel(p) { const i = parcels.indexOf(p); if (i >= 0) parcels.splice(i, 1); }
+
 // ---------- particles and birds ----------
 export const particles = [];                                  // { k: rain|snow|leaf|petal|smoke|splash|confetti, x, y, vx, vy, t, c? }
 export const birds = [];
@@ -111,6 +128,7 @@ export function tickAmbient(dt) {
   for (let i = particles.length - 1; i >= 0; i--) {
     const f = particles[i]; if (f.k === 'confetti') f.vy += 120 * dt; f.x += f.vx * dt; f.y += f.vy * dt; f.t -= dt;
     const precip = f.k === 'rain' || f.k === 'snow';
+    if (f.k === 'shred') f.vy += 90 * dt;
     if (f.t < 0 || f.y > H || (precip && f.y > SKY * T && f.y > groundHit(f.x))) particles.splice(i, 1);
   }
 }

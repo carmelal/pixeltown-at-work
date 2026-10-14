@@ -5,8 +5,8 @@ import { people, clearGroups, leaveGroup, leave, send, sendToWork } from './peop
 import { geese, spawnGeese, flushGeese, startMenace } from './animals.js';
 import { bus, summonBus, burst, deliverMail } from './town.js';
 import { ri } from './util.js';
-import { coffeeRun, tidyUp, pinNotice, freePerson, INTENTS } from './people.js';
-import { startReno, endReno } from './town.js';
+import { coffeeRun, tidyUp, pinNotice, freePerson, INTENTS, bikeRide } from './people.js';
+import { startReno, endReno, airDrop } from './town.js';
 import { buildings } from './world.js';
 
 export function say() {}                                        // banners are gone; the dev status line is the only readout
@@ -21,11 +21,13 @@ const HANDLERS = {
   commit: () => { fountain.sprayUntil = performance.now() + 5000; burst(16); },          // the fountain celebrates
   push: () => { deliverMail(); react(['👋'], 0.3); },
   merge: () => summonBus(ri(3, 5)),                                                       // a busload of visitors arrives
-  checkout: ev => { react(['🔀'], 0.4); say('🔀 ' + (ev.msg || 'checkout')); },
+  checkout: () => bikeRide(ri(1, 4)),
   pull: () => deliverMail(pick(buildings)),                                               // one big package for somebody
   rebase: () => tidyUp(),
   new: ev => pinNotice((ev.msg || '').split(': ').pop()),
   stash: () => { const p = freePerson(); if (p) INTENTS.pickflowers.go(p); },
+  up_start: () => airDrop(ri(4, 7)),
+  up_stop: () => {},
   server_start: () => startReno(),
   server_stop: () => endReno(),
   stash_pop: () => { const p = freePerson(); if (p) INTENTS.picnic.go(p); },                                                                 // sweeping and watering (shovelling in winter)
