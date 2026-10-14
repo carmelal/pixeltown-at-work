@@ -25,9 +25,8 @@ const HANDLERS = {
   editing: ev => {                                               // light an office and send a few idle people to it
     const b = pick(bType('office')); b.lit = true; let k = 0;
     for (const p of outside()) if (p.act === 'idle' && k < 3) { k++; p.wait = 0; p.route = []; sendToWork(p, b); p.say = '💻'; }
-    say('✏️ editing ' + (ev.msg || ''));
   },
-  idle: (ev, msg) => { for (const p of people) if (p.inside && p.inside.type === 'office' && Math.random() < 0.5) p.wait = Math.min(p.wait, rnd(1, 4)); say('☕️ taking a break' + msg, 4); },
+  idle: () => { for (const p of people) if (p.inside && p.inside.type === 'office' && Math.random() < 0.5) p.wait = Math.min(p.wait, rnd(1, 4)); },
   gathering: (ev, msg) => { setMode('gathering', 25); for (const p of people) { if (p.inside === bus) continue; if (p.inside) leave(p); p.route = []; p.wait = rnd(0, 2); } say('🏛️ town gathering' + msg); },
   nap: (ev, msg) => { setMode('nap', 20); for (const p of people) { if (p.inside === bus) continue; p.route = []; p.wait = 0; } say('💤 nap time' + msg); },
   wake: (ev, msg) => { mode.current = 'normal'; for (const p of people) if (p.inside !== bus) p.wait = rnd(0, 2); say('wake up' + msg); },
@@ -36,16 +35,22 @@ const HANDLERS = {
   geese: () => { if (geese.state === 'away') spawnGeese(true); },
 };
 
+let statusEl = null, connected = false, lastSignal = '';
+const ICON = { editing: '✏️', idle: '☕️', commit: '✅️', push: '🚀', merge: '🤝', checkout: '🔀', pull: '📥', rebase: '🔄', reset: '⏪' };
+function showStatus() { if (statusEl) statusEl.textContent = `${connected ? '●' : '○'} ${lastSignal || (connected ? 'connected, waiting for signals' : 'reconnecting')}`; }
+
 export function onEvent(ev) {
   const msg = ev.msg ? `: ${ev.msg}` : '';
+  if (ev.type !== 'hello') { const t = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); lastSignal = `${ICON[ev.type] || '·'} ${ev.type}${ev.msg ? ' ' + ev.msg : ''} (${t})`; showStatus(); }
   const h = HANDLERS[ev.type];
   if (h) return h(ev, msg);
   const p = pick(people.filter(p => !p.inside)) || people[0]; p.say = '❓️'; p.wait = Math.max(p.wait, 3); say(ev.type + msg);
 }
 
-export function connect(statusEl) {
+export function connect(el) {
+  statusEl = el;
   const es = new EventSource('/events');
-  es.onopen = () => statusEl.textContent = '● live';
-  es.onerror = () => statusEl.textContent = '○ reconnecting';
+  es.onopen = () => { connected = true; showStatus(); };
+  es.onerror = () => { connected = false; showStatus(); };
   es.onmessage = e => onEvent(JSON.parse(e.data));
 }
