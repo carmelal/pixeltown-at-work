@@ -15,9 +15,11 @@ bar.querySelectorAll('details').forEach(d => d.addEventListener('toggle', () => 
 connect(document.getElementById('conn'));
 
 // ---------- frame ----------
+const FRAME_MS = 1000 / 30;
 let last = performance.now();
 function frame(now) {
-  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  if (now - last < FRAME_MS - 1) return requestAnimationFrame(frame);
+  const dt = Math.min(0.1, (now - last) / 1000); last = now;
   if ((mode.current === 'gathering' || mode.current === 'nap') && now > mode.until) onEvent({ type: 'wake' });
   for (const p of people) tickPerson(p, dt); tickPicnics(); tickNotices();
   for (const d of dogs) tickDog(d, dt);
