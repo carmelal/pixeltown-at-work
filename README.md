@@ -53,7 +53,14 @@ People
 - Keep a routine: commute 08–10, lunch at the cafes 12–13:30, errands and home 17–19, asleep after dark. In rain or snow they hurry indoors, carry umbrellas, or shelter under trees.
 
 Animals
-- Five dogs with temperaments: tuck (loyal; follows the mouse pointer; drops everything for a picnic), biscuit (lazy), pepper (wild; jumps in the pond after the ducks), rufus and olive (social). They follow people, play with each other, chase squirrels, beg at picnics and race people to air-dropped parcels.
+- Five dogs:
+  - tuck — black labrador, blue collar, one white pixel on his chest. Loyal: follows the mouse pointer while it is over the town, and drops everything to beg at a picnic.
+  - rocky — chocolate labrador, red collar. Lazy: lies in the sun and does not move for anyone.
+  - odin — yellow labrador, green collar. Social: drifts over to whatever conversation is happening.
+  - angel — Formosan mountain dog with a brown head and a white, dalmatian-spotted body, pink collar. Wild: chases squirrels, ducks and geese, and jumps in the pond after them.
+  - lulu — brown Formosan mountain dog with a black stripe down her back, no collar. Shy: never follows anyone and keeps her distance when people come near.
+
+  All of them follow people (lulu excepted), play with each other, beg at picnics, and race people to air-dropped parcels — a dog that wins shreds the box.
 - Mallards on the pond; they come for bread and fly off when a dog turns up.
 - Squirrels dashing between trees.
 - A black cat on the rooftops who keeps her thoughts to herself.
