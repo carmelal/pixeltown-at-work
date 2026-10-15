@@ -102,20 +102,29 @@ const DOG = {
        wag:   ['.......p.', 't.....fe.', '.cdcccccm', '.ccccdkcm', '.ccccwww.', '..l..l...'], lie:  ['.......p.', '.cdcccce.', 'tccccvkcm'], swim: ['.......p.', '.......e.', '..cccckcm'] },
 };
 function dogPalette(d) {
-  const tux = d.marking === 'tuxedo', spots = d.marking === 'spots', white = '#f2f2f2', dark = 'rgba(0,0,0,0.25)';
-  return { c: d.coat, t: d.coat, e: '#111', m: tux ? white : d.coat, w: tux ? white : d.coat, v: tux ? white : spots ? dark : d.coat, d: spots ? dark : d.coat,
-    k: d.collar || d.coat, p: d.ears === 'pointy' ? d.coat : null, f: d.ears === 'floppy' ? d.coat : null, l: tux ? white : '#222' };
+  const spots = d.marking === 'spots', dark = d.spot || 'rgba(0,0,0,0.25)';
+  return { c: d.coat, t: d.coat, e: '#111', m: d.coat, w: d.coat, v: spots ? dark : d.coat, d: spots ? dark : d.coat,
+    k: d.collar || d.coat, p: d.ears === 'pointy' ? d.coat : null, f: d.ears === 'floppy' ? d.coat : null, l: '#222' };
+}
+// a differently coloured head: repaint the head column, muzzle and ear after the blit
+function paintHead(d, fx, dir, top, rows) {
+  if (!d.head) return;
+  px(fx, top, d.head, 1, rows); px(fx + dir, top + 1, d.head, 1, d.size === 3 ? 2 : 1);
+  if (d.ears === 'pointy') px(fx, top - 1, d.head, 1, 1); else px(fx - dir, top, d.head, 1, 1);
+  px(fx, top, '#111', 1, 1);
 }
 export function drawDog(d) {
   const bw = 3 + d.size, bh = d.size === 3 ? 3 : 2, x = Math.round(d.x) - Math.floor(bw / 2), y = Math.round(d.y) - bh, moving = d.route.length > 0;
-  const left = d.flip ? x - 2 : x - 1, pal = dogPalette(d), frames = DOG[d.size];
+  const left = d.flip ? x - 2 : x - 1, pal = dogPalette(d), frames = DOG[d.size], fx = d.flip ? x - 1 : x + bw, dir = d.flip ? -1 : 1;
   if (d.swim) {
-    const wy = Math.round(d.y); blit(frames.swim, left, wy - 3, pal, d.flip);
+    const wy = Math.round(d.y); blit(frames.swim, left, wy - 3, pal, d.flip); paintHead(d, fx, dir, wy - 2, 2);
     px(x - 1, wy, 'rgba(255,255,255,0.35)', bw + 3, 1); return bubble(d.say, x + bw / 2, wy - 5);
   }
-  if (d.lying) { const ly = y + bh - 2; blit(frames.lie, left, ly - 1, pal, d.flip); return bubble(d.say, x + bw / 2, ly - 3); }
+  if (d.lying) { const ly = y + bh - 2; blit(frames.lie, left, ly - 1, pal, d.flip); paintHead(d, fx, dir, ly, 2); if (d.back) px(x, ly, d.back, bw, 1); return bubble(d.say, x + bw / 2, ly - 3); }
   const step = moving && Math.floor(d.frame * 10) % 2, wag = d.follow && !moving && Math.floor(d.frame * 6) % 2;
-  blit(step ? frames.step : wag ? frames.wag : frames.stand, left, y - 2, pal, d.flip);
+  blit(step ? frames.step : wag ? frames.wag : frames.stand, left, y - 2, pal, d.flip); paintHead(d, fx, dir, y - 1, bh + 1);
+  if (d.back) px(x, y, d.back, bw, 1);
+  if (d.marking === 'chest') px(x + (d.flip ? 1 : bw - 2), y + bh - 1, '#f2f2f2', 1, 1);
   bubble(d.say, x + bw / 2, y - 4);
 }
 

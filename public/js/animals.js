@@ -5,13 +5,13 @@ import { particles, splash, carrier, parcels, takeParcel } from './town.js';
 
 // ---------- dogs ----------
 const DOGS = [
-  { name: 'tuck', coat: '#1a1a1a', marking: 'tuxedo', size: 3, ears: 'floppy', collar: '#3b82f6', temperament: 'loyal', favourite: 'cursor', loyalty: 0.97, curiosity: 0.25, laziness: 0.05 },
-  { name: 'biscuit', coat: '#c9a060', marking: 'none', size: 2, ears: 'floppy', collar: '#d33', temperament: 'lazy', loyalty: 0.3, curiosity: 0.0, laziness: 0.6 },
-  { name: 'pepper', coat: '#8a8a90', marking: 'spots', size: 1, ears: 'pointy', collar: null, temperament: 'wild', loyalty: 0.3, curiosity: 0.55, laziness: 0.02 },
-  { name: 'rufus', coat: '#8a5a2b', marking: 'none', size: 2, ears: 'pointy', collar: '#2a4', temperament: 'social', loyalty: 0.6, curiosity: 0.1, laziness: 0.15 },
-  { name: 'olive', coat: '#e8e0d0', marking: 'spots', size: 2, ears: 'floppy', collar: '#a3d', temperament: 'social', loyalty: 0.5, curiosity: 0.2, laziness: 0.1 },
+  { name: 'tuck', coat: '#1a1a1a', marking: 'chest', size: 3, ears: 'floppy', collar: '#3b82f6', temperament: 'loyal', favourite: 'cursor', loyalty: 0.97, curiosity: 0.25, laziness: 0.05 },
+  { name: 'rocky', coat: '#4a2c17', marking: 'none', size: 3, ears: 'floppy', collar: '#d33', temperament: 'lazy', loyalty: 0.3, curiosity: 0.0, laziness: 0.6 },
+  { name: 'odin', coat: '#d9b36a', marking: 'none', size: 3, ears: 'floppy', collar: '#2a4', temperament: 'social', loyalty: 0.6, curiosity: 0.1, laziness: 0.15 },
+  { name: 'angel', coat: '#f0f0f0', head: '#8a5a2b', marking: 'spots', spot: '#333', size: 2, ears: 'pointy', collar: '#e5a', temperament: 'wild', loyalty: 0.3, curiosity: 0.55, laziness: 0.02 },
+  { name: 'lulu', coat: '#8a5a2b', marking: 'none', back: '#1a1a1a', size: 2, ears: 'pointy', collar: null, temperament: 'shy', loyalty: 0, curiosity: 0.1, laziness: 0.1 },
 ];
-const PLAYFUL = { wild: 0.35, social: 0.3, loyal: 0.15, lazy: 0.03 };
+const PLAYFUL = { wild: 0.35, social: 0.3, loyal: 0.15, lazy: 0.03, shy: 0.08 };
 export const dogs = DOGS.map(d => {
   const [c, r] = pick(walkTiles);
   return { ...d, c, r, x: tileX(c), y: tileY(r), route: [], wait: rnd(0, 3), follow: null, chase: null, play: null, playUntil: 0, swim: null, picnic: null, parcel: null, lying: false, say: '', flip: false, frame: 0, desc: 'sniffing around' };
@@ -105,7 +105,7 @@ function followCursor(d) {
 }
 function followSomeone(d) {
   if (d.follow && (d.follow.inside || (d.follow === carrier && !carrier.active) || Math.random() > d.loyalty)) d.follow = null;
-  if (!d.follow && Math.random() < 0.35) d.follow = pick([...people.filter(p => !p.inside), ...(carrier.active ? [carrier, carrier, carrier] : [])]);
+  if (!d.follow && d.temperament !== 'shy' && Math.random() < 0.35) d.follow = pick([...people.filter(p => !p.inside), ...(carrier.active ? [carrier, carrier, carrier] : [])]);
   if (!d.follow) return false;
   const f = d.follow;
   d.desc = `following ${f.name}`;
@@ -136,6 +136,10 @@ function decide(d) {
     if (near({ c: t[0], r: t[1] }, d) > 1.5 && goNear(d, t[0], t[1], 'getting away from the geese')) return;
     d.lying = true; d.desc = 'cowering under a tree'; d.wait = rnd(3, 6);
     return;
+  }
+  if (d.temperament === 'shy') {
+    const close = people.find(p => !p.inside && Math.hypot(p.c - d.c, p.r - d.r) < 2.5);
+    if (close) { const away = walkTiles.filter(t => Math.hypot(t[0] - close.c, t[1] - close.r) > 5 && Math.hypot(t[0] - d.c, t[1] - d.r) < 7); if (away.length && goTo(d, pick(away), 'keeping her distance')) return; }
   }
   if (d.play) return tickPlay(d);
   if (tryStartPlay(d)) return;

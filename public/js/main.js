@@ -71,7 +71,7 @@ function hitTargets() {
   for (const d of dogs) t.push({ x: d.x, y: d.y, r: 5, text: `${d.name} (${d.temperament}) — ${d.desc}` });
   if (carrier.active) t.push({ x: carrier.x, y: carrier.y + 2, r: 5, text: `mail carrier — ${carrier.desc}` });
   for (const q of parcels) t.push({ x: q.x, y: q.y - 2, r: 5, text: q.chute ? 'parcel — coming down' : dogs.some(d => d.parcel === q) ? `parcel — ${dogs.find(d => d.parcel === q).name} is going for it` : q.claimed ? `parcel — ${q.claimed.name} is on the way` : 'parcel — waiting to be collected' });
-  if (cat.state !== 'inside' && cat.state !== 'hidden') t.push({ x: cat.x, y: cat.y - 2, r: 5, text: `cat — ${cat.desc}` });
+  if (cat.state !== 'inside' && cat.state !== 'hidden') t.push({ x: cat.x, y: cat.y - 2, r: 5, text: `cat — ${cat.state === 'loaf' ? 'loafing' : 'being a cat'}` });
   for (const w of workers) t.push({ x: w.x, y: w.y + 2, r: 5, text: `${w.name} (crew) — ${w.desc}` });
   if (geese.state !== 'away') for (const g of geese.birds) t.push({ x: g.x, y: g.y, r: 5, text: `canada goose — ${geese.menace ? `${geese.check} failed; on the warpath` : geese.state === 'landed' ? `waiting on ${geese.check || 'the checks'}` : geese.state === 'leaving' ? 'leaving in a huff' : 'flying in'}` });
   for (const q of squirrels) if (!q.hidden) t.push({ x: q.x, y: q.y, r: 4, text: 'squirrel — making a run for it' });
