@@ -40,6 +40,10 @@ export const WICON = { clear: '☀️', cloudy: '☁️', rain: '🌧️', snow:
 // ---------- global mood (set by events) ----------
 export const mode = { current: 'normal', until: 0 };
 export const cursor = { x: 0, y: 0, active: false };
+// sensory-friendly mode: one switch, tuning in one place
+export const calm = { on: false };
+export const CALM = { pace: 0.6, fps: 15, maxOutside: 7, stayHome: 0.85, dogLazyMin: 0.3, dogLazyMul: 3, desaturate: 0.22, cloudPeriod: 2200, fountainSlow: 3, rippleSlow: 3, rainSpeed: 22, snowSpeed: 6 };
+export const pace = () => calm.on ? CALM.pace : 1;
 export const inquiry = { active: false };
 export const statues = [];                                              // { tile, progress 0..1, done }
 export const STATUE_TILES = [[13, 2], [17, 2], [11, 2], [19, 2]];
@@ -67,7 +71,7 @@ export const VISITS = {
 };
 export const facadeHeight = b => (HEIGHTS[b.type] || 24) + (b.type === 'house' ? (b.hue % 3) : 0);
 export const roofY = b => (b.r + b.h) * T - facadeHeight(b);
-export const isOpen = t => { const v = VISITS[t]; if (!v) return true; const h = hourNow(); return h >= v.open[0] && (h < v.open[1] || h + 24 < v.open[1]); };
+export const isOpen = t => { const v = VISITS[t]; if (!v) return true; if (t === 'club' && calm.on) return false; const h = hourNow(); return h >= v.open[0] && (h < v.open[1] || h + 24 < v.open[1]); };
 
 export const fountain = { c: 14, r: 7, sprayUntil: 0 };
 export const notices = [];

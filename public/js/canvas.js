@@ -1,4 +1,4 @@
-import { W } from './world.js';
+import { W, calm } from './world.js';
 
 export const cv = document.getElementById('c'), ctx = cv.getContext('2d');
 export const hi = document.getElementById('hi'), hctx = hi.getContext('2d');
@@ -16,7 +16,7 @@ export function label(text, x, y, color, size = 6, align = 'center', outline = t
   if (outline) { hctx.lineWidth = Math.max(1, S * 0.45); hctx.lineJoin = 'round'; hctx.strokeStyle = 'rgba(0,0,0,0.8)'; hctx.strokeText(text, x * S, y * S); }
   hctx.fillStyle = color; hctx.fillText(text, x * S, y * S);
 }
-export const bubble = (text, x, y, size = 4.5) => text && label(text, x, y, '#fff', size, 'center', false);
+export const bubble = (text, x, y, size = 4.5) => text && !calm.on && label(text, x, y, '#fff', size, 'center', false);
 
 export function blit(rows, left, top, pal, mirror = false) {
   for (let r = 0; r < rows.length; r++) {

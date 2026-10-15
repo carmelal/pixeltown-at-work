@@ -1,5 +1,5 @@
 import { clamp, hash, lerp } from './util.js';
-import { T, W, H, SKY, SEASON, PAL, weather, wet, hourNow, nowDate, facadeHeight, roofY, isOpen, pond, fountain, benches, beds, notices, LANE, BUS_STOP, BUS_WAIT, mode, reno } from './world.js';
+import { T, W, H, SKY, SEASON, PAL, weather, wet, hourNow, nowDate, facadeHeight, roofY, calm, CALM, isOpen, pond, fountain, benches, beds, notices, LANE, BUS_STOP, BUS_WAIT, mode, reno } from './world.js';
 import { ctx, px, shade, rgbn, grey, label, bubble, blit } from './canvas.js';
 import { geese, gooseAirborne } from './animals.js';
 
@@ -23,9 +23,9 @@ const FACADE = {
   shop(x, y, w, h, n, now, roof, b) { for (let i = 0; i < w; i += 2) px(x + i, y + 6, i % 4 ? '#eee' : `hsl(${b.hue} 70% 45%)`, 2, 2); },
   bakery(x, y, w) { for (let i = 0; i < w; i += 2) px(x + i, y + 6, i % 4 ? '#fff' : '#e8a', 2, 2); px(x + 2, y + 10, '#c84', 3, 2); px(x + w - 5, y + 10, '#c84', 3, 2); },
   club(x, y, w, h, n, now) {
-    const open = isOpen('club'), hue = (now / 6) % 360;
+    const open = isOpen('club'), hue = calm.on ? 280 : (now / 6) % 360;
     px(x + 1, y + 5, open ? `hsl(${hue} 90% 60%)` : '#3a3344', w - 2, 1);
-    for (let i = 2; i < w - 2; i += 4) px(x + i, y + 8, open ? `hsl(${(hue + i * 40 + Math.floor(now / 250) * 90) % 360} 90% ${55 + 15 * Math.sin(now / 90 + i)}%)` : '#1a1626', 2, 2);
+    for (let i = 2; i < w - 2; i += 4) px(x + i, y + 8, open ? (calm.on ? `hsl(${(280 + i * 40) % 360} 60% 55%)` : `hsl(${(hue + i * 40 + Math.floor(now / 250) * 90) % 360} 90% ${55 + 15 * Math.sin(now / 90 + i)}%)`) : '#1a1626', 2, 2);
     if (open && Math.floor(now / 700) % 2 === 0) bubble('🎶', x + w / 2, y - 4 - (now / 300) % 3);
   },
   library(x, y, w, h, n) { for (let i = 1; i < w - 1; i += 4) px(x + i, y + 6, `hsl(15 20% ${shade(70, n)}%)`, 2, h - 8); px(x + w / 2 - 3, y + 7, '#c9a', 2, 1); px(x + w / 2 + 1, y + 7, '#9ac', 2, 1); },
@@ -68,7 +68,7 @@ const SKIN = '#f1c9a5';
 export function drawPerson(p, now) {
   if (p.inside) return;
   const x = Math.round(p.x) - 1, y = Math.round(p.y) - 5, moving = p.route.length > 0, step = moving && Math.floor(p.frame * 7) % 2;
-  const dance = mode.current === 'gathering' && !moving ? Math.round(Math.sin(now / 120 + p.x)) : 0;
+  const dance = mode.current === 'gathering' && !moving && !calm.on ? Math.round(Math.sin(now / 120 + p.x)) : 0;
   const yy = y - Math.abs(dance);
   const pal = p.detective ? { h: p.hair, s: SKIN, t: '#8a7250', l: '#4a3a2a', r: '#c33', w: '#222' } : { h: p.hair, s: SKIN, t: p.shirt, l: '#223', r: '#c33', w: '#222' };
   if (p.bike) blit(PERSON.bike, x - 2, yy - 1, pal);
@@ -77,8 +77,8 @@ export function drawPerson(p, now) {
     const bob = Math.round(Math.sin(now / 500)); px(x + 7, yy - 1, 'rgba(200,220,255,0.6)', 1, 10 + bob); px(x + 7, yy + 9 + bob, '#e33', 1, 1);
   }
   else if (p.act === 'sit') blit(PERSON.sit, x, yy, pal);
-  else if (p.act === 'carve') blit(Math.floor(p.frame * 5) % 2 ? PERSON.step : PERSON.stand, x, yy - 1, pal);
-  else if (p.act === 'work') blit(Math.floor(p.frame * 4) % 2 ? PERSON.step : PERSON.stand, x, yy - 1, pal);
+  else if (p.act === 'carve') blit(!calm.on && Math.floor(p.frame * 5) % 2 ? PERSON.step : PERSON.stand, x, yy - 1, pal);
+  else if (p.act === 'work') blit(!calm.on && Math.floor(p.frame * 4) % 2 ? PERSON.step : PERSON.stand, x, yy - 1, pal);
   else blit(step ? PERSON.step : PERSON.stand, x, yy - 1, pal);
   if (p.detective && p.act !== 'sit' && !p.bike) {
     px(x - 1, yy - 2, '#5a4a3a', 5, 1); px(x, yy - 3, '#5a4a3a', 3, 1); px(x + (p.flip ? -1 : 3), yy - 2, '#5a4a3a', 1, 1);   // deerstalker: crown plus a peak front and back
@@ -264,7 +264,7 @@ export function drawSky(n, now) {
   ctx.fillRect(0, 0, W, SKY * T + 6);
   if (n > 0.5) for (let i = 0; i < 25; i++) px((i * 97) % W, (i * 53) % 14, '#ddd');
   px(W - 22, 3, n > 0.5 ? '#f0f0e0' : '#ffd34d', 6, 6);
-  for (let i = 0; i < (weather.type === 'clear' ? 2 : 5); i++) { const cx = ((now / (900 + i * 150)) + i * 61) % (W + 40) - 20, cy = 2 + (i * 5) % 9; const c = `rgba(${235 - 70 * n},${235 - 70 * n},${240 - 70 * n},${weather.type === 'clear' ? 0.6 : 0.9})`; px(cx, cy, c, 14, 3); px(cx + 3, cy - 2, c, 7, 2); }
+  for (let i = 0; i < (weather.type === 'clear' ? 2 : 5); i++) { const cx = ((now / ((calm.on ? CALM.cloudPeriod : 900) + i * 150)) + i * 61 + 30) % (W + 40) - 20, cy = 2 + (i * 5) % 9; const c = `rgba(${235 - 70 * n},${235 - 70 * n},${240 - 70 * n},${weather.type === 'clear' ? 0.6 : 0.9})`; px(cx, cy, c, 14, 3); px(cx + 3, cy - 2, c, 7, 2); }
 }
 export function drawGround(n, now) {
   ctx.fillStyle = rgbn(PAL.grass, n); ctx.beginPath(); ctx.moveTo(0, H); ctx.lineTo(0, SKY * T + 1);
@@ -278,12 +278,12 @@ export function drawGround(n, now) {
   const pr = pond.w * T, pt = pond.r * T;
   ctx.fillStyle = water; ctx.beginPath(); ctx.moveTo(0, pt + 2); ctx.quadraticCurveTo(pr * 0.35, pt - 2, pr * 0.6, pt + 1); ctx.quadraticCurveTo(pr - 2, pt + 3, pr, H); ctx.lineTo(0, H); ctx.closePath(); ctx.fill();
   ctx.strokeStyle = rgbn([120, 100, 60], n); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, pt + 1.5); ctx.quadraticCurveTo(pr * 0.35, pt - 2.5, pr * 0.6, pt + 0.5); ctx.quadraticCurveTo(pr - 2.5, pt + 2.5, pr - 0.5, H); ctx.stroke();
-  if (!PAL.snow) for (let i = 0; i < 6; i++) px((i * 37 + Math.floor(now / 400)) % (pr - 10), pt + 4 + (i * 5) % 10, 'rgba(255,255,255,0.35)', 3, 1);
+  if (!PAL.snow) for (let i = 0; i < 6; i++) px((i * 37 + Math.floor(now / (400 * (calm.on ? CALM.rippleSlow : 1)))) % (pr - 10), pt + 4 + (i * 5) % 10, 'rgba(255,255,255,0.35)', 3, 1);
   ctx.fillStyle = grey(84, n); ctx.beginPath(); ctx.moveTo(LANE.c * T, H); ctx.quadraticCurveTo(LANE.c * T, LANE.r * T, LANE.c * T + 16, LANE.r * T); ctx.lineTo(W, LANE.r * T); ctx.lineTo(W, H); ctx.closePath(); ctx.fill();
   ctx.strokeStyle = grey(150, n); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(LANE.c * T + 0.5, H); ctx.quadraticCurveTo(LANE.c * T + 0.5, LANE.r * T + 0.5, LANE.c * T + 16, LANE.r * T + 0.5); ctx.lineTo(W, LANE.r * T + 0.5); ctx.stroke();
   for (const b of beds) drawBed(b, n);
   px(fountain.c * T + 1, fountain.r * T + 1, '#889', 14, 14); px(fountain.c * T + 3, fountain.r * T + 3, PAL.snow ? '#cde' : '#5ac', 10, 10);
-  if (!PAL.snow) { const big = now < fountain.sprayUntil; px(fountain.c * T + 7, fountain.r * T + (big ? -4 : 3) + Math.round(Math.sin(now / 90)), '#cff', 2, big ? 11 : 4); if (big) { px(fountain.c * T + 4, fountain.r * T - 1 + Math.round(Math.sin(now / 70)), '#cff', 1, 3); px(fountain.c * T + 11, fountain.r * T - 1 + Math.round(Math.cos(now / 70)), '#cff', 1, 3); } }
+  if (!PAL.snow) { const big = now < fountain.sprayUntil, k = calm.on ? CALM.fountainSlow : 1; px(fountain.c * T + 7, fountain.r * T + (big ? -4 : 3) + Math.round(Math.sin(now / (90 * k))), '#cff', 2, big ? 11 : 4); if (big) { px(fountain.c * T + 4, fountain.r * T - 1 + Math.round(Math.sin(now / (70 * k))), '#cff', 1, 3); px(fountain.c * T + 11, fountain.r * T - 1 + Math.round(Math.cos(now / (70 * k))), '#cff', 1, 3); } }
   if (PAL.snow) for (let i = 0; i < 14; i++) px((i * 53 + 7) % W, 14 * T + 1 + (i * 3) % 6, i % 3 ? '#a6d' : '#c8f', 1, 1);
   for (const [c, r] of benches) { px(c * T + 1, r * T + 4, '#6b4a2a', 6, 2); px(c * T + 1, r * T + 6, '#4a3018', 1, 1); px(c * T + 6, r * T + 6, '#4a3018', 1, 1); }
 }
@@ -314,6 +314,11 @@ export function drawParticle(f) {
   else px(f.x, f.y, f.c);
 }
 export function drawTints(n) {
+  if (calm.on) { ctx.save(); ctx.globalCompositeOperation = 'saturation'; ctx.fillStyle = `rgba(128,128,128,${CALM.desaturate})`; ctx.fillRect(0, 0, W, H); ctx.restore(); }
+  if (calm.on && wet()) {
+    const snow = weather.type === 'snow', t = performance.now() / 1000, speed = snow ? CALM.snowSpeed : CALM.rainSpeed;
+    for (let i = 0; i < (snow ? 60 : 90); i++) { const y = ((i * 53 + 7) + t * speed) % H, x = ((i * 97 + 13) - y * (snow ? 0.3 : 0.5) + W * 4) % W; if (snow) px(x, y, 'rgba(255,255,255,0.7)'); else for (let k = 0; k < 3; k++) px(x + k * 0.5, y + k, 'rgba(170,200,240,0.45)'); }
+  }
   if (n > 0) { ctx.fillStyle = `rgba(10,12,40,${0.45 * n})`; ctx.fillRect(0, 0, W, H); }
   if (weather.type !== 'clear') { ctx.fillStyle = `rgba(60,70,90,${weather.type === 'cloudy' ? 0.12 : 0.22})`; ctx.fillRect(0, 0, W, H); }
 }

@@ -1,5 +1,5 @@
 import { rnd, ri, pick, clamp, moveToward } from './util.js';
-import { T, W, H, tileX, tileY, SEASON, hourNow, pond, trees, walkTiles, pondSide, spotsAround, nearestTile, path, followRoute, cursor, doorOf, bType } from './world.js';
+import { T, W, H, tileX, tileY, SEASON, hourNow, pond, trees, walkTiles, pondSide, spotsAround, nearestTile, path, followRoute, cursor, doorOf, bType, calm, CALM, pace } from './world.js';
 import { people, groups, send, picnics } from './people.js';
 import { particles, splash, carrier, parcels, takeParcel } from './town.js';
 
@@ -142,14 +142,14 @@ function decide(d) {
     if (close) { const away = walkTiles.filter(t => Math.hypot(t[0] - close.c, t[1] - close.r) > 5 && Math.hypot(t[0] - d.c, t[1] - d.r) < 7); if (away.length && goTo(d, pick(away), 'keeping her distance')) return; }
   }
   if (d.play) return tickPlay(d);
-  if (tryStartPlay(d)) return;
-  const lazyNow = d.laziness * (SEASON === 'summer' ? 1.4 : 1) * (hourNow() > 13 && hourNow() < 16 ? 1.5 : 1);
+  if (!calm.on && tryStartPlay(d)) return;
+  const lazyNow = (calm.on ? Math.max(CALM.dogLazyMin, d.laziness * CALM.dogLazyMul) : d.laziness) * (SEASON === 'summer' ? 1.4 : 1) * (hourNow() > 13 && hourNow() < 16 ? 1.5 : 1);
   if (Math.random() < lazyNow) { d.lying = true; d.follow = null; d.desc = pick(['lying in the sun', 'having a lie down', 'not moving for anyone']); d.wait = rnd(8, 25); if (Math.random() < 0.5) d.say = '💤'; return; }
   const landed = parcels.filter(q => !q.chute);
-  if (landed.length && Math.random() < (d.temperament === 'lazy' ? 0.1 : 0.45)) { const q = pick(landed); if (goTo(d, q.tile, 'going for that box', '❗️')) { d.parcel = q; d.chase = d.follow = null; return; } }
+  if (!calm.on && landed.length && Math.random() < (d.temperament === 'lazy' ? 0.1 : 0.45)) { const q = pick(landed); if (goTo(d, q.tile, 'going for that box', '❗️')) { d.parcel = q; d.chase = d.follow = null; return; } }
   if (picnics.length && Math.random() < (d.temperament === 'lazy' ? 0.15 : 0.35)) { const b = pick(picnics); if (goTo(d, b.tile, 'heading for the picnic', '👃')) { d.picnic = b; d.follow = null; return; } }
   if (d.temperament === 'social' && groups.length && Math.random() < 0.4) { const m = pick(pick(groups).members); if (goNear(d, m.c, m.r, `joining ${m.name}'s conversation`)) { d.follow = null; return; } }
-  if (tryDistraction(d)) return;
+  if (!calm.on && tryDistraction(d)) return;
   if (d.favourite === 'cursor' && cursor.active) return followCursor(d);
   if (followSomeone(d)) return;
   goTo(d, pick(walkTiles), 'sniffing around');
@@ -164,7 +164,7 @@ export function tickDog(d, dt) {
   }
   if (d.swim) return tickSwim(d, dt);
   if (d.route.length) {
-    followRoute(d, d.chase || d.parcel ? 44 : d.picnic ? 40 : d.play ? 36 : 20 + d.size * 2, dt, () => { d.wait = d.chase ? 0 : d.play ? rnd(0.2, 0.6) : rnd(1, 4); });
+    followRoute(d, (d.chase || d.parcel ? 44 : d.picnic ? 40 : d.play ? 36 : 20 + d.size * 2) * pace(), dt, () => { d.wait = d.chase ? 0 : d.play ? rnd(0.2, 0.6) : rnd(1, 4); });
     if (d.chase?.kind === 'squirrel' && !d.chase.hidden && Math.hypot(d.chase.x - d.x, d.chase.y - d.y) < 10) { hideSquirrel(d.chase); d.say = '🐿️'; d.chase = null; d.route = []; d.wait = 2.5; d.desc = 'lost the squirrel'; }
     return;
   }
@@ -181,7 +181,7 @@ export function hideSquirrel(q) {
 export function tickSquirrel(q, dt) {
   q.frame += dt;
   if (q.hidden) {
-    if ((q.wait -= dt) > 0) return;
+    if ((q.wait -= dt) > 0 || calm.on) return;
     const from = spotsAround(...q.tree);
     if (!from.length) { q.wait = 5; return; }
     [q.c, q.r] = pick(from); q.x = tileX(q.c); q.y = tileY(q.r); q.hidden = false;
@@ -237,9 +237,10 @@ export function startMenace() { geese.menace = true; }
 function endMenace() { geese.menace = false; for (const p of people) if (p.desc === 'hiding from the geese') p.wait = rnd(1, 6); }
 function menace() {
   for (const g of geese.birds) if (Math.random() < 0.05) g.say = pick(['🔪', '🎺', '😠']);
-  for (const d of dogs) if (!d.lying && geese.birds.some(g => Math.hypot(g.x - d.x, g.y - d.y) < 8)) { d.say = '😨'; d.wait = 0; }
+  if (!calm.on) for (const d of dogs) if (!d.lying && geese.birds.some(g => Math.hypot(g.x - d.x, g.y - d.y) < 8)) { d.say = '😨'; d.wait = 0; }
   for (const p of people) {
     if (p.inside || p.intent === 'hide' || p.bike || p.act === 'carve') continue;
+    if (calm.on && p.route.length) continue;
     p.route = []; p.say = pick(['😱', '😨', '🏃']); p.group = null; p.joining = null;
     send(p, 'hide', doorOf(p.visitor ? pick(bType('cafe')) : p.home), 'fleeing the geese');
   }
@@ -266,7 +267,7 @@ export function tickGeese(dt) {
   if (geese.state === 'landed') {
     for (const g of geese.birds) {
       if ((g.wait -= dt) <= 0) {
-        if (geese.menace) { const t = pick(walkTiles); g.gx = tileX(t[0]) + rnd(-3, 3); g.gy = tileY(t[1]); g.wait = rnd(0.5, 2); g.hop = Math.random() < 0.6; }
+        if (geese.menace && !calm.on) { const t = pick(walkTiles); g.gx = tileX(t[0]) + rnd(-3, 3); g.gy = tileY(t[1]); g.wait = rnd(0.5, 2); g.hop = Math.random() < 0.6; }
         else { g.gx = clamp(g.x + rnd(-6, 6), geese.tile[0] * T - 12, geese.tile[0] * T + 20); g.gy = clamp(g.y + rnd(-2, 2), 14 * T + 1, 14 * T + 7); g.wait = rnd(1, 4); }
         g.say = Math.random() < 0.08 ? '🎺' : '';
       }
@@ -279,7 +280,7 @@ export function tickGeese(dt) {
       g.say = '🔪'; g.flip = p.x < g.x;
       if (p.act === 'idle' || p.act === 'fish') { send(p, 'flee', pick(walkTiles.filter(t => Math.hypot(t[0] * T - p.x, t[1] * T - p.y) > 30)), 'getting away from the geese'); p.say = '😬'; }
     }
-    if (geese.menace) menace();
+    if (geese.menace) { if (calm.on) { for (const p of people) if (!p.inside && p.intent !== 'hide' && !p.route.length && p.act !== 'carve') send(p, 'hide', doorOf(p.visitor ? pick(bType('cafe')) : p.home), 'heading indoors'); } else menace(); }
     if (geese.timer <= 0) flushGeese();
     return;
   }

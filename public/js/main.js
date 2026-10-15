@@ -1,4 +1,4 @@
-import { T, W, H, SKY, SEASON, southern, night, weather, WICON, nowDate, clock, seasonOverridden, notices, reno, statues, buildings, trees, docks, lamps, pond, LANE, BUS_STOP, mode, cursor } from './world.js';
+import { T, W, H, SKY, SEASON, southern, night, weather, WICON, nowDate, clock, seasonOverridden, notices, reno, statues, calm, CALM, buildings, trees, docks, lamps, pond, LANE, BUS_STOP, mode, cursor } from './world.js';
 import { cv, ctx, hi, hctx, fitOverlay, label } from './canvas.js';
 import { people, tickPerson, picnics, tickPicnics, tickNotices } from './people.js';
 import { dogs, tickDog, ducks, tickDucks, squirrels, tickSquirrel, geese, tickGeese, gooseAirborne } from './animals.js';
@@ -13,13 +13,21 @@ bar.querySelectorAll('[data-ev]').forEach(el => el.onclick = () => { fetch('/eve
 document.addEventListener('click', e => { if (!bar.contains(e.target)) bar.querySelectorAll('details[open]').forEach(d => d.removeAttribute('open')); });
 bar.querySelectorAll('details').forEach(d => d.addEventListener('toggle', () => { if (d.open) bar.querySelectorAll('details[open]').forEach(o => { if (o !== d) o.removeAttribute('open'); }); }));
 connect(document.getElementById('conn'));
+// ---------- sensory-friendly toggle (persisted) ----------
+const calmBtn = document.getElementById('calm');
+function setCalm(on) {
+  calm.on = on; localStorage.setItem('pixeltown-calm', on ? '1' : '0');
+  calmBtn.textContent = on ? '◐ sensory-friendly: on' : '○ sensory-friendly'; calmBtn.classList.toggle('on', on);
+}
+calmBtn.onclick = () => setCalm(!calm.on);
+setCalm(localStorage.getItem('pixeltown-calm') === '1');
 
 // ---------- frame ----------
-const FRAME_MS = 1000 / 30;
+const frameMs = () => 1000 / (calm.on ? CALM.fps : 30);
 let last = performance.now();
 function frame(now) {
-  if (now - last < FRAME_MS - 1) return requestAnimationFrame(frame);
-  const dt = Math.min(0.1, (now - last) / 1000); last = now;
+  if (now - last < frameMs() - 1) return requestAnimationFrame(frame);
+  const dt = Math.min(0.15, (now - last) / 1000); last = now;
   if ((mode.current === 'gathering' || mode.current === 'nap') && now > mode.until) onEvent({ type: 'wake' });
   for (const p of people) tickPerson(p, dt); tickPicnics(); tickNotices();
   for (const d of dogs) tickDog(d, dt);
@@ -90,7 +98,7 @@ function areaText(mx, my) {
   if (my >= LANE.r * T && mx >= LANE.c * T) return 'bus lane';
   if (my >= pond.r * T && mx < pond.w * T) return 'pond';
   const b = buildings.find(b => mx >= b.c * T && mx < (b.c + b.w) * T && my >= b.r * T && my < (b.r + b.h) * T);
-  if (b) { const ins = people.filter(q => q.inside === b).map(q => q.name); const extra = b.type === 'hall' && notices.length ? ` — notices: ${notices.map(n => n.text).join(', ')}` : ''; return `${b.type}${ins.length ? ' — inside: ' + ins.join(', ') : ''}${extra}`; }
+  if (b) { const ins = people.filter(q => q.inside === b).map(q => q.name); const extra = b.type === 'hall' && notices.length ? ` — notices: ${notices.map(n => n.text).join(', ')}` : ''; return `${b.type === 'hall' ? 'town hall' : b.type}${ins.length ? ' — inside: ' + ins.join(', ') : ''}${extra}`; }
   if (my < SKY * T) return `${SEASON}, ${weather.type}${southern ? ' (southern hemisphere)' : ''}`;
   return null;
 }

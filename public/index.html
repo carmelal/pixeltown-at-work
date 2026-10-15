@@ -22,11 +22,13 @@
   #bar .menu { position: absolute; left: 0; bottom: 100%; margin-bottom: 4px; background: #14161d; border: 1px solid #2a2e3a; z-index: 2; display: flex; flex-direction: column; }
   #bar .menu span { padding: 3px 10px; white-space: nowrap; }
   #bar .menu span:hover, #bar summary:hover { cursor: pointer; color: #fff; background: #1e2130; }
+  #calm { position: absolute; top: 6.5%; left: 6px; line-height: 1; z-index: 3; background: rgba(0,0,0,0.45); color: #c8ccd4; border: 1px solid rgba(255,255,255,0.15); font: inherit; font-size: 11px; padding: 2px 7px; cursor: pointer; opacity: .55; }
+  #calm:hover, #calm.on { opacity: 1; }
   #tip { position: fixed; pointer-events: none; background: #14161d; border: 1px solid #2a2e3a; padding: 3px 6px; display: none; white-space: nowrap; }
 </style>
 </head>
 <body>
-<div id="stage"><canvas id="c" width="240" height="136"></canvas><canvas id="hi"></canvas></div>
+<div id="stage"><canvas id="c" width="240" height="136"></canvas><canvas id="hi"></canvas><button id="calm" title="fewer moving parts, no emoji, duller colours">○ sensory-friendly</button></div>
 <div id="bar">
   <details><summary>git</summary><div class="menu"><span data-ev="commit">commit</span><span data-ev="push">push</span><span data-ev="merge">merge</span><span data-ev="pull">pull</span><span data-ev="rebase">rebase</span><span data-ev="checkout">checkout</span><span data-ev="new" data-msg="x: feature/thing">new</span><span data-ev="stash">stash</span><span data-ev="stash_pop">stash pop</span></div></details>
   <details><summary>checks</summary><div class="menu"><span data-ev="check_start" data-msg="tests">start</span><span data-ev="check_pass">pass</span><span data-ev="check_fail" data-msg="tests">fail</span></div></details>

@@ -28,6 +28,20 @@ curl "localhost:1337/event?type=commit&msg=repo:%20message"
 
 With nothing listening, every hook below is a silent no-op.
 
+## Sensory-friendly mode
+
+The `○ sensory-friendly` toggle under the clock keeps the town but turns the volume down. The setting is remembered by the browser. While it is on:
+
+- No emoji speech bubbles.
+- Everything moves at 60% speed, the page renders at 15 fps, and the fountain, ripples and clouds are slower.
+- Fewer people are out at once (about seven); dogs are lazier and do not chase, play, or race for parcels; squirrels stay in their trees.
+- No confetti, splashes, smoke, stone chips or shredded cardboard. Rain and snow are slow diagonal streaks and drifting flakes. Leaves and petals still fall.
+- No dancing or hammering wobble; the club is closed; nothing flashes.
+- A failed check still brings the geese, but they stay by the pond and people walk indoors instead of running.
+- Colours are gently desaturated.
+
+The numbers live in `CALM` in `public/js/world.js`.
+
 ## What happens on its own
 
 People

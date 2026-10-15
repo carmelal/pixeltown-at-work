@@ -1,5 +1,5 @@
 import { rnd, ri, pick, hash, moveToward } from './util.js';
-import { T, W, H, SKY, SEASON, night, wet, weather, rollWeather, buildings, trees, fountain, LANE, BUS_STOP, tileX, tileY, doorOf, path, followRoute, reno, siteSpots, walkTiles, roofY } from './world.js';
+import { T, W, H, SKY, SEASON, night, wet, weather, rollWeather, buildings, trees, fountain, LANE, BUS_STOP, tileX, tileY, doorOf, path, followRoute, reno, siteSpots, walkTiles, roofY, calm, pace } from './world.js';
 import { people, leaveGroup, addVisitor } from './people.js';
 
 // ---------- vehicles that use the lane: rise out of the bottom edge at the curve, turn right, stop, leave to the right ----------
@@ -8,7 +8,8 @@ function laneVehicle(extra) { return { state: 'away', x: LANE_IN_X, y: H + 30, w
 function enterLane(v) { v.state = 'rising'; v.x = LANE_IN_X; v.y = H + 30; }
 // returns true while the vehicle is still travelling; onStop is called once when it reaches stopX
 function driveLane(v, dt, speed, onStop) {
-  if (v.state === 'rising') { v.y -= 40 * dt; if (v.y <= LANE_Y) { v.y = LANE_Y; v.state = 'arriving'; v.x = LANE_TURN_X; } return true; }
+  speed *= pace();
+  if (v.state === 'rising') { v.y -= 40 * pace() * dt; if (v.y <= LANE_Y) { v.y = LANE_Y; v.state = 'arriving'; v.x = LANE_TURN_X; } return true; }
   if (v.state === 'arriving') { v.x += speed * dt; if (v.x >= v.stopX) { v.x = v.stopX; v.state = 'stopped'; onStop(); } return true; }
   if (v.state === 'leaving') { v.x += speed * dt; if (v.x > W + 20) v.state = 'away'; return true; }
   return false;
@@ -47,7 +48,7 @@ export function tickMail(dt) {
   if (driveLane(van, dt, 50, startCarrier)) return;
   if (!carrier.active) return;
   carrier.frame += dt;
-  if (carrier.route.length) return followRoute(carrier, carrier.pkg ? 16 : 28, dt, carrierArrived);
+  if (carrier.route.length) return followRoute(carrier, (carrier.pkg ? 16 : 28) * pace(), dt, carrierArrived);
   if ((carrier.wait -= dt) > 0) return;
   carrier.say = '';
   nextStop();
@@ -89,11 +90,11 @@ export function endReno() {
   for (const w of workers) { w.state = 'board'; w.say = '👋'; w.desc = 'packing up'; w.route = path([w.c, w.r], truck.spot) || []; }
 }
 export function tickTruck(dt) {
-  if (truck.state === 'driving' && moveToward(truck, truck.tx, truck.ty, 40, dt)) { truck.state = 'dumping'; truck.timer = 2; }
+  if (truck.state === 'driving' && moveToward(truck, truck.tx, truck.ty, 40 * pace(), dt)) { truck.state = 'dumping'; truck.timer = 2; }
   else if (truck.state === 'dumping' && (truck.timer -= dt) <= 0) { truck.loaded = false; reno.pile = 8; truck.state = 'parked'; unloadCrew(); }
   else if (truck.state === 'parked' && !reno.active && !workers.length) truck.state = 'leaving';
   else if (truck.state === 'leaving') {
-    truck.x += (truck.fromLeft ? -45 : 45) * dt; truck.flip = truck.fromLeft;
+    truck.x += (truck.fromLeft ? -45 : 45) * pace() * dt; truck.flip = truck.fromLeft;
     if (truck.x < -truck.w - 10 || truck.x > W + 20) { truck.state = 'away'; reno.site = null; reno.pile = 0; reno.scaffold = 0; }
   }
   for (let i = workers.length - 1; i >= 0; i--) if (tickWorker(workers[i], dt)) workers.splice(i, 1);
@@ -108,7 +109,7 @@ function unloadCrew() {
 }
 function tickWorker(w, dt) {
   w.frame += dt;
-  if (w.route.length) { followRoute(w, 18, dt, () => workerArrived(w)); return false; }
+  if (w.route.length) { followRoute(w, 18 * pace(), dt, () => workerArrived(w)); return false; }
   if ((w.wait -= dt) > 0) return false;
   if (w.state === 'board') return true;
   if (w.state === 'work') {
@@ -200,6 +201,13 @@ const groundHit = x => H - 2 + (hash(String(Math.floor(x))) % 30) - 15;
 
 export function tickAmbient(dt) {
   if (performance.now() > weather.until) rollWeather();
+  if (calm.on) {
+    for (let i = particles.length - 1; i >= 0; i--) if (particles[i].k !== 'leaf' && particles[i].k !== 'petal') particles.splice(i, 1);
+    for (let i = birds.length - 1; i >= 0; i--) { const b = birds[i]; b.x += b.vx * dt; if (b.x < -10 || b.x > W + 10) birds.splice(i, 1); }
+    if ((SEASON === 'autumn' || SEASON === 'spring') && Math.random() < 0.04) { const [c, r] = pick(trees); particles.push({ k: SEASON === 'autumn' ? 'leaf' : 'petal', x: c * T + rnd(0, 8), y: r * T - 2, vx: rnd(-6, 6), vy: rnd(5, 9), t: rnd(2, 4) }); }
+    for (let i = particles.length - 1; i >= 0; i--) { const f = particles[i]; f.x += f.vx * dt; f.y += f.vy * dt; if ((f.t -= dt) < 0 || f.y > H) particles.splice(i, 1); }
+    return;
+  }
   if ((birdTimer -= dt) <= 0 && night() < 0.5 && !wet()) {
     birdTimer = rnd(8, 30);
     const y = rnd(4, 18), dir = Math.random() < 0.5 ? 1 : -1;

@@ -1,6 +1,6 @@
 import { rnd, ri, pick, hash, weighted } from './util.js';
 import { T, COLS, tileX, tileY, SKY, SEASON, hourNow, night, weather, wet, buildings, VISITS, isOpen, benches, docks, beds, notices,
-  FOUNTAIN_VIEWS, PLAZA, BUS_WAIT, BUS_STOP, walkable, walkTiles, pondSide, treeSpots, doorOf, bType, spotsAround, buildingAt, path, followRoute, mode, inquiry, statues, STATUE_TILES } from './world.js';
+  FOUNTAIN_VIEWS, PLAZA, BUS_WAIT, BUS_STOP, walkable, walkTiles, pondSide, treeSpots, doorOf, bType, spotsAround, buildingAt, path, followRoute, mode, inquiry, statues, STATUE_TILES, calm, CALM, pace } from './world.js';
 import { nearestDog, ducks, geese } from './animals.js';
 import { bus, parcels, takeParcel, particles } from './town.js';
 
@@ -247,6 +247,7 @@ function choose(p) {
     return;
   }
   if (mode.current === 'nap') return idle(p, 'napping', [5, 5], '💤');
+  if (calm.on && people.filter(o => !o.inside).length > CALM.maxOutside && Math.random() < CALM.stayHome && goHome(p, [30, 90], 'staying in') !== false) return;
   for (const [prob, when, act] of URGES) if (when() && Math.random() < prob && act(p) !== false) return;
   const entries = Object.entries(INTENTS).filter(([, i]) => i.w > 0 && (!i.when || i.when(p))).map(([id, i]) => ({ id, w: i.w }));
   if (INTENTS[weighted(entries).id].go(p) === false) idle(p, 'standing around');
@@ -329,7 +330,7 @@ export function tickPerson(p, dt) {
   p.frame += dt;
   if (p.route.length) {
     if (wet() && p.umbrella && !p.say) p.say = weather.type === 'rain' ? '☔️' : '🧣';
-    followRoute(p, p.bike ? 42 : wet() ? 20 : 14, dt, () => { if (/☔️|🧣/.test(p.say)) p.say = ''; arrived(p); });
+    followRoute(p, (p.bike ? 42 : wet() ? 20 : 14) * pace(), dt, () => { if (/☔️|🧣/.test(p.say)) p.say = ''; arrived(p); });
     return;
   }
   p.wait -= dt;
